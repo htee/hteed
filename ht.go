@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"net/url"
 	"os"
 	"strings"
 
+	"github.com/benburkert/http"
 	"github.com/nu7hatch/gouuid"
 )
 
