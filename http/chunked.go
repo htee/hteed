@@ -170,11 +170,18 @@ func (cw *chunkedWriter) Write(data []byte) (n int, err error) {
 	if n, err = cw.Wire.Write(data); err != nil {
 		return
 	}
+
 	if n != len(data) {
 		err = io.ErrShortWrite
 		return
 	}
 	_, err = io.WriteString(cw.Wire, "\r\n")
+
+	if bw, ok := cw.Wire.(*bufio.Writer); ok {
+		if bw.Buffered() > 0 {
+			bw.Flush()
+		}
+	}
 
 	return
 }
