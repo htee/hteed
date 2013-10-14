@@ -13,6 +13,12 @@ import (
 	"github.com/nu7hatch/gouuid"
 )
 
+var endpoint = flag.String("endpoint", "http://127.0.0.1:3000", "URL of the ht service.")
+var namespace = flag.String("hostname", hostname(), "Namespace of the data stream.")
+var id = flag.String("id", uid(), "ID of the data stream.")
+var contentType = flag.String("content-type", "text/plain", "Content type of the data stream.")
+var help = flag.Bool("help", false, "Print help and exit")
+
 func hostname() string {
 	hn, e := os.Hostname()
 
@@ -32,12 +38,6 @@ func uid() string {
 
 	return uid.String()
 }
-
-var endpoint = flag.String("endpoint", "http://127.0.0.1:3000", "URL of the ht service.")
-var namespace = flag.String("hostname", hostname(), "Namespace of the data stream.")
-var id = flag.String("id", uid(), "ID of the data stream.")
-var contentType = flag.String("content-type", "text/plain", "Content type of the data stream.")
-var help = flag.Bool("help", false, "Print help and exit")
 
 func printHelp() {
 	fmt.Println("ht - http + tee\n")
@@ -94,7 +94,12 @@ func main() {
 	client := *http.DefaultClient
 	req := buildRequest(url)
 
-	if _, err := client.Do(req); err != nil {
+	res, err := client.Do(req)
+	if err != nil {
 		panic(err.Error())
+	}
+
+	if res.StatusCode != 204 {
+		panic(fmt.Sprintf("unexpected server response %s\n", res.Status))
 	}
 }
