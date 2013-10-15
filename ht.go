@@ -14,7 +14,7 @@ import (
 )
 
 var endpoint = flag.String("endpoint", "http://127.0.0.1:3000", "URL of the ht service.")
-var namespace = flag.String("hostname", hostname(), "Namespace of the data stream.")
+var namespace = flag.String("namespace", hostname(), "Namespace of the data stream.")
 var id = flag.String("id", uid(), "ID of the data stream.")
 var contentType = flag.String("content-type", "text/plain", "Content type of the data stream.")
 var help = flag.Bool("help", false, "Print help and exit")
