@@ -2,24 +2,39 @@ package main
 
 import (
 	"fmt"
-	"net/http"
+	"io"
 
-	"github.com/gorilla/mux"
-
+	"github.com/benburkert/http"
 	"github.com/htio/htsd/config"
 )
 
-func ChunkedHandler(w http.ResponseWriter, r *http.Request) {
+func chunkedHandler(w http.ResponseWriter, r *http.Request) {
+	buf := make([]byte, 4096)
+	var n int
+	var err error
+
+	for {
+		n, err = r.Body.Read(buf)
+
+		if err != nil && err != io.EOF {
+			fmt.Println(err.Error())
+		}
+
+		if n > 0 {
+			fmt.Printf("%s", buf[:n])
+		} else {
+			goto respond
+		}
+	}
+
+respond:
 	w.WriteHeader(204)
 	fmt.Fprintf(w, "TransferEncoding: %s", r.TransferEncoding[0])
 }
 
 func main() {
 	c := config.New()
-	r := mux.NewRouter()
+	http.HandleFunc("/", chunkedHandler)
 
-	r.Headers("Transfer-Encoding", "chunked")
-	r.HandleFunc("/", chunkedHandler)
-
-	http.ListenAndServe(c.Addr, r)
+	http.ListenAndServe(c.Addr, nil)
 }
