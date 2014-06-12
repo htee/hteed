@@ -24,8 +24,11 @@ func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	stateKey := "state:" + r.URL.Path[1:]
+	dataKey := "data:" + r.URL.Path[1:]
 
 	conn.Do("SET", stateKey, "STREAMING")
+
+	defer conn.Do("SET", stateKey, "FIN")
 
 	for {
 		n, err = r.Body.Read(buf)
@@ -35,6 +38,7 @@ func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if n > 0 {
+			conn.Do("APPEND", dataKey, buf[:n])
 			fmt.Printf("%s", buf[:n])
 		} else {
 			goto respond
