@@ -3,15 +3,29 @@ package main
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/benburkert/http"
+	"github.com/garyburd/redigo/redis"
 	"github.com/htio/htsd/config"
+)
+
+var (
+	pool *redis.Pool
 )
 
 func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 	buf := make([]byte, 4096)
+	conn := pool.Get()
+
+	defer conn.Close()
+
 	var n int
 	var err error
+
+	stateKey := "state:" + r.URL.Path[1:]
+
+	conn.Do("SET", stateKey, "STREAMING")
 
 	for {
 		n, err = r.Body.Read(buf)
@@ -32,8 +46,31 @@ respond:
 	fmt.Fprintf(w, "TransferEncoding: %s", r.TransferEncoding[0])
 }
 
+func redisPool(url string) *redis.Pool {
+	return &redis.Pool{
+		Dial: func() (redis.Conn, error) {
+			return redis.Dial("tcp", url)
+		},
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+	}
+}
+
 func main() {
 	c := config.New()
+
+	pool = redisPool(c.RedisUrl)
+
+	conn := pool.Get()
+
+	_, err := conn.Do("PING")
+
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
 	http.HandleFunc("/", chunkedHandler)
 
 	http.ListenAndServe(c.Addr, nil)

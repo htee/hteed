@@ -33,5 +33,13 @@ func New() *Config {
 
 	c.Addr = *addr + ":" + *port
 
+	if c.RedisUrl == "" {
+		c.RedisUrl = os.Getenv("REDIS_URL")
+	}
+
+	if c.RedisUrl == "" {
+		c.RedisUrl = ":6379"
+	}
+
 	return c
 }
