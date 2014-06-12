@@ -10,6 +10,11 @@ import (
 	"github.com/htio/htsd/config"
 )
 
+const (
+	Streaming = iota
+	Fin
+)
+
 var (
 	pool *redis.Pool
 )
@@ -25,10 +30,11 @@ func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 
 	stateKey := "state:" + r.URL.Path[1:]
 	dataKey := "data:" + r.URL.Path[1:]
+	streamKey := r.URL.Path[1:] // pub-sub channels don't show up in KEYS *
 
-	conn.Do("SET", stateKey, "STREAMING")
+	conn.Do("SET", stateKey, Streaming)
 
-	defer conn.Do("SET", stateKey, "FIN")
+	defer conn.Do("SET", stateKey, Fin)
 
 	for {
 		n, err = r.Body.Read(buf)
@@ -38,7 +44,11 @@ func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if n > 0 {
-			conn.Do("APPEND", dataKey, buf[:n])
+			conn.Send("MULTI")
+			conn.Send("APPEND", dataKey, buf[:n])
+			conn.Send("PUBLISH", streamKey, append([]byte{Streaming}, buf[:n]...))
+			conn.Send("EXEC")
+			conn.Flush()
 			fmt.Printf("%s", buf[:n])
 		} else {
 			goto respond
@@ -46,6 +56,8 @@ func chunkedHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 respond:
+	conn.Do("PUBLISH", streamKey, []byte{Fin})
+
 	w.WriteHeader(204)
 	fmt.Fprintf(w, "TransferEncoding: %s", r.TransferEncoding[0])
 }
