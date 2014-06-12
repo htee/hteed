@@ -19,7 +19,20 @@ var (
 	pool *redis.Pool
 )
 
-func chunkedHandler(w http.ResponseWriter, r *http.Request) {
+func handler(w http.ResponseWriter, r *http.Request) {
+	if r.TransferEncoding[0] != "chunked" {
+		w.WriteHeader(404)
+	}
+
+	switch r.Method {
+	case "POST":
+		postHandler(w, r)
+	}
+
+	fmt.Fprintf(w, "TransferEncoding: %s", r.TransferEncoding[0])
+}
+
+func postHandler(w http.ResponseWriter, r *http.Request) {
 	buf := make([]byte, 4096)
 	conn := pool.Get()
 
@@ -87,7 +100,7 @@ func main() {
 		fmt.Println(err.Error())
 	}
 
-	http.HandleFunc("/", chunkedHandler)
+	http.HandleFunc("/", handler)
 
 	http.ListenAndServe(c.Addr, nil)
 }
