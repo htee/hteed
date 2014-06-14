@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"time"
 
@@ -47,16 +46,15 @@ func postHandler(w http.ResponseWriter, r *http.Request) {
 		if err == io.EOF {
 			conn.Send("PUBLISH", streamKey(r), []byte{Fin})
 		} else if err != nil {
-			fmt.Println(err.Error())
+			w.WriteHeader(500)
+			panic(err)
 		}
 
 		if n > 0 {
 			conn.Send("MULTI")
 			conn.Send("APPEND", dataKey(r), buf[:n])
 			conn.Send("PUBLISH", streamKey(r), append([]byte{Streaming}, buf[:n]...))
-			conn.Send("EXEC")
-			conn.Flush()
-			fmt.Printf("%s", buf[:n])
+			conn.Do("EXEC")
 		} else {
 			goto respond
 		}
@@ -81,18 +79,21 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	switch state {
 	case Streaming:
 		psc := redis.PubSubConn{conn}
-		data, err := redis.String(conn.Do("GET", dataKey(r)))
 
-		if err != nil {
+		conn.Send("MULTI")
+		conn.Send("GET", dataKey(r))
+		conn.Send("SUBSCRIBE", streamKey(r))
+		if results, err := redis.Values(conn.Do("EXEC")); err != nil {
 			w.WriteHeader(500)
 			panic(err)
+		} else {
+			var buf []byte
+			redis.Scan(results, &buf)
+
+			w.WriteHeader(200)
+			w.Write(buf)
+			w.(http.Flusher).Flush()
 		}
-
-		psc.Subscribe(streamKey(r))
-
-		w.WriteHeader(200)
-		w.Write([]byte(data))
-		w.(http.Flusher).Flush()
 
 		for {
 			switch v := psc.Receive().(type) {
@@ -157,10 +158,8 @@ func main() {
 
 	conn := pool.Get()
 
-	_, err := conn.Do("PING")
-
-	if err != nil {
-		fmt.Println(err.Error())
+	if _, err := conn.Do("PING"); err != nil {
+		panic(err)
 	}
 
 	http.HandleFunc("/", handler)
