@@ -7,6 +7,7 @@ import (
 	"github.com/benburkert/http"
 	"github.com/garyburd/redigo/redis"
 	"github.com/htio/htsd/config"
+	"github.com/htio/htsd/rack"
 )
 
 const (
@@ -18,16 +19,7 @@ var (
 	pool *redis.Pool
 )
 
-func handler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "POST":
-		postHandler(w, r)
-	case "GET":
-		getHandler(w, r)
-	}
-}
-
-func postHandler(w http.ResponseWriter, r *http.Request) {
+func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	buf := make([]byte, 4096)
 	conn := pool.Get()
 
@@ -66,7 +58,7 @@ respond:
 	w.WriteHeader(204)
 }
 
-func getHandler(w http.ResponseWriter, r *http.Request) {
+func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	conn := pool.Get()
 	defer conn.Close()
 
@@ -162,7 +154,10 @@ func main() {
 		panic(err)
 	}
 
-	http.HandleFunc("/", handler)
+	s := rack.Stack{
+		rack.If(rack.IsChunkedPost, rack.Stack{rack.Build(recordStream)}),
+		rack.If(rack.IsGet, rack.Stack{rack.Build(playbackStream)}),
+	}
 
-	http.ListenAndServe(c.Addr, nil)
+	rack.ListenAndServe(c.Addr, s)
 }
