@@ -95,7 +95,13 @@ func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) 
 					w.Write(v.Data[1:])
 					w.(http.Flusher).Flush()
 				case Fin:
-					w.(http.Flusher).Flush()
+					hj, _ := w.(http.Hijacker)
+					conn, bufrw, _ := hj.Hijack()
+
+					bufrw.WriteString("0\r\n\r\n")
+					bufrw.Flush()
+					conn.Close()
+
 					return
 				}
 			case error:
