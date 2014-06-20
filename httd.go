@@ -3,13 +3,14 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
+	"strings"
 	"time"
 
+	"github.com/benburkert/htt/config"
+	"github.com/benburkert/htt/rack"
+	"github.com/benburkert/htt/stream"
 	"github.com/benburkert/http"
 	"github.com/garyburd/redigo/redis"
-	"github.com/htio/htsd/config"
-	"github.com/htio/htsd/rack"
 )
 
 const (
@@ -22,42 +23,21 @@ var (
 )
 
 func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
-	buf := make([]byte, 4096)
-	conn := pool.Get()
+	parts := strings.Split(r.URL.Path[1:], "/")
+	owner, name := parts[0], parts[1]
 
+	conn := pool.Get()
 	defer conn.Close()
 
-	var n int
-	var err error
-
-	conn.Do("SET", stateKey(r), Streaming)
-
-	defer conn.Do("SET", stateKey(r), Fin)
-
-	for {
-		n, err = r.Body.Read(buf)
-
-		if err == io.EOF {
-			conn.Send("PUBLISH", streamKey(r), []byte{Fin})
-		} else if err != nil {
+	if stream, err := stream.In(owner, name, conn); err != nil {
+		w.WriteHeader(500)
+	} else {
+		if _, err = stream.Fill(r.Body); err != nil {
 			w.WriteHeader(500)
-			panic(err)
-		}
-
-		if n > 0 {
-			conn.Send("MULTI")
-			conn.Send("APPEND", dataKey(r), buf[:n])
-			conn.Send("PUBLISH", streamKey(r), append([]byte{Streaming}, buf[:n]...))
-			conn.Do("EXEC")
 		} else {
-			goto respond
+			w.WriteHeader(204)
 		}
 	}
-
-respond:
-	conn.Do("PUBLISH", streamKey, []byte{Fin})
-
-	w.WriteHeader(204)
 }
 
 func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
