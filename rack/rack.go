@@ -1,6 +1,8 @@
 package rack
 
 import (
+	"strings"
+
 	"github.com/benburkert/http"
 )
 
@@ -74,4 +76,19 @@ func IsChunkedPost(r *http.Request) bool {
 
 func IsGet(r *http.Request) bool {
 	return r.Method == "GET"
+}
+
+func IsSSE(r *http.Request) bool {
+	return r.Header["Accept"][0] == "text/event-stream"
+}
+
+func IsBrowser(r *http.Request) bool {
+	hdrs := r.Header
+
+	return strings.Contains(hdrs["User-Agent"][0], "WebKit") &&
+		strings.Contains(hdrs["Accept"][0], "text/html")
+}
+
+func IsStreamPath(r *http.Request) bool {
+	return strings.Contains(r.URL.Path[1:], "/")
 }
