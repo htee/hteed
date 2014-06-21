@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -27,15 +28,35 @@ func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	owner, name := parts[0], parts[1]
 
 	conn := pool.Get()
-	defer conn.Close()
 
-	if in, err := stream.In(owner, name, conn); err != nil {
-		w.WriteHeader(500)
-	} else {
-		if _, err = in.From(r.Body); err != nil {
+	in := stream.In(owner, name, conn)
+
+	defer in.Close()
+
+	for {
+		select {
+		case err := <-in.Errors():
+			fmt.Println(err.Error())
 			w.WriteHeader(500)
-		} else {
-			w.WriteHeader(204)
+
+			return
+		default:
+			buf := make([]byte, 4096)
+
+			if n, err := r.Body.Read(buf); err == io.EOF {
+				w.WriteHeader(204)
+				w.(http.Flusher).Flush()
+				close(in.In())
+
+				return
+			} else if err != nil {
+				fmt.Println(err.Error())
+				w.WriteHeader(500)
+
+				return
+			} else {
+				in.In() <- buf[:n]
+			}
 		}
 	}
 }
@@ -45,20 +66,43 @@ func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) 
 	owner, name := parts[0], parts[1]
 
 	conn := pool.Get()
-	defer conn.Close()
 
-	if out, err := stream.Out(owner, name, conn); err != nil {
-		w.WriteHeader(500)
-	} else {
-		w.WriteHeader(200)
-		out.To(w)
+	responseStarted := false
+	out := stream.Out(owner, name, conn)
 
-		hj, _ := w.(http.Hijacker)
-		c, bufrw, _ := hj.Hijack()
+	defer out.Close()
 
-		bufrw.WriteString("0\r\n\r\n")
-		bufrw.Flush()
-		c.Close()
+	for {
+		select {
+		case err := <-out.Errors():
+			fmt.Println(err.Error())
+
+			if !responseStarted {
+				w.WriteHeader(500)
+			}
+
+			return
+		case data, ok := <-out.Out():
+			if ok {
+
+				if !responseStarted {
+					w.WriteHeader(200)
+					responseStarted = true
+				}
+
+				w.Write(data)
+				w.(http.Flusher).Flush()
+			} else {
+				hj, _ := w.(http.Hijacker)
+				c, bufrw, _ := hj.Hijack()
+
+				bufrw.WriteString("0\r\n\r\n")
+				bufrw.Flush()
+				c.Close()
+
+				return
+			}
+		}
 	}
 }
 
