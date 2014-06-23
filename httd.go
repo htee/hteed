@@ -14,11 +14,6 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-const (
-	Streaming = iota
-	Fin
-)
-
 var (
 	pool *redis.Pool
 )
@@ -214,18 +209,6 @@ func playbackSSE(h http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	hdr.Set("Connection", "close")
 
 	h(sseWriter(w), r)
-}
-
-func stateKey(r *http.Request) string {
-	return "state:" + streamKey(r)
-}
-
-func dataKey(r *http.Request) string {
-	return "data:" + streamKey(r)
-}
-
-func streamKey(r *http.Request) string {
-	return r.URL.Path[1:] // pub-sub channels don't show up in KEYS *
 }
 
 func redisPool(url string) *redis.Pool {
