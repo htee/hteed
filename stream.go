@@ -2,6 +2,7 @@ package htt
 
 import (
 	"errors"
+	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
@@ -13,20 +14,58 @@ const (
 	Closed
 )
 
-func StreamIn(owner, name string, conn redis.Conn) InStream {
-	s := stream{owner, name, conn, make(chan []byte), make(chan bool), make(chan error)}
+var (
+	pool *redis.Pool
+)
+
+func init() {
+	ConfigCallback(configure)
+}
+
+func configure(cnf *Config) {
+	pool = &redis.Pool{
+		Dial: func() (redis.Conn, error) {
+			return redis.Dial("tcp", cnf.RedisUrl)
+		},
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+	}
+
+	conn := pool.Get()
+	defer conn.Close()
+
+	if _, err := conn.Do("PING"); err != nil {
+		panic(err)
+	}
+}
+
+func StreamIn(owner, name string) InStream {
+	s := newStream(owner, name)
 
 	go s.streamIn()
 
 	return s
 }
 
-func StreamOut(owner, name string, conn redis.Conn) OutStream {
-	s := stream{owner, name, conn, make(chan []byte), make(chan bool), make(chan error)}
+func StreamOut(owner, name string) OutStream {
+	s := newStream(owner, name)
 
 	go s.streamOut()
 
 	return s
+}
+
+func newStream(owner, name string) *stream {
+	return &stream{
+		owner: owner,
+		name:  name,
+		conn:  pool.Get(),
+		data:  make(chan []byte),
+		fin:   make(chan bool),
+		err:   make(chan error),
+	}
 }
 
 type Stream interface {
@@ -60,19 +99,19 @@ type stream struct {
 	err chan error
 }
 
-func (s stream) Owner() string { return s.owner }
+func (s *stream) Owner() string { return s.owner }
 
-func (s stream) Name() string { return s.name }
+func (s *stream) Name() string { return s.name }
 
-func (s stream) Close() { s.fin <- true }
+func (s *stream) Close() { s.fin <- true }
 
-func (s stream) Errors() <-chan error { return s.err }
+func (s *stream) Errors() <-chan error { return s.err }
 
-func (s stream) In() chan<- []byte { return s.data }
+func (s *stream) In() chan<- []byte { return s.data }
 
-func (s stream) Out() <-chan []byte { return s.data }
+func (s *stream) Out() <-chan []byte { return s.data }
 
-func (s stream) streamIn() {
+func (s *stream) streamIn() {
 	defer s.conn.Close()
 
 	for {
@@ -91,7 +130,7 @@ func (s stream) streamIn() {
 	}
 }
 
-func (s stream) streamOut() {
+func (s *stream) streamOut() {
 	defer s.conn.Close()
 
 	if state, err := s.getState(); err != nil {
@@ -103,7 +142,7 @@ func (s stream) streamOut() {
 	}
 }
 
-func (s stream) append(buf []byte) {
+func (s *stream) append(buf []byte) {
 	s.conn.Send("MULTI")
 	s.conn.Send("SET", s.stateKey(), Opened)
 	s.conn.Send("APPEND", s.dataKey(), buf)
@@ -113,7 +152,7 @@ func (s stream) append(buf []byte) {
 	}
 }
 
-func (s stream) close() {
+func (s *stream) close() {
 	s.conn.Send("MULTI")
 	s.conn.Send("SET", s.stateKey(), Closed)
 	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
@@ -122,7 +161,7 @@ func (s stream) close() {
 	}
 }
 
-func (s stream) sendData() {
+func (s *stream) sendData() {
 	if data, err := redis.String(s.conn.Do("GET", s.dataKey())); err != nil {
 		s.err <- err
 	} else {
@@ -130,7 +169,7 @@ func (s stream) sendData() {
 	}
 }
 
-func (s stream) streamData() {
+func (s *stream) streamData() {
 	var buf []byte
 
 	s.conn.Send("MULTI")
@@ -148,7 +187,7 @@ func (s stream) streamData() {
 	}
 }
 
-func (s stream) streamChannel() {
+func (s *stream) streamChannel() {
 	psc := redis.PubSubConn{s.conn}
 
 	for {
@@ -174,16 +213,16 @@ func (s stream) streamChannel() {
 	}
 }
 
-func (s stream) getState() (State, error) {
+func (s *stream) getState() (State, error) {
 	state, err := redis.Int(s.conn.Do("GET", s.stateKey()))
 
 	return State(state), err
 }
 
-func (s stream) stateKey() string { return "state:" + s.nwo() }
+func (s *stream) stateKey() string { return "state:" + s.nwo() }
 
-func (s stream) dataKey() string { return "data:" + s.nwo() }
+func (s *stream) dataKey() string { return "data:" + s.nwo() }
 
-func (s stream) streamKey() string { return s.nwo() }
+func (s *stream) streamKey() string { return s.nwo() }
 
-func (s stream) nwo() string { return s.owner + "/" + s.name }
+func (s *stream) nwo() string { return s.owner + "/" + s.name }

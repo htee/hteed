@@ -4,24 +4,16 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/benburkert/htt"
 	"github.com/benburkert/http"
-	"github.com/garyburd/redigo/redis"
-)
-
-var (
-	pool *redis.Pool
 )
 
 func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path[1:], "/")
 	owner, name := parts[0], parts[1]
 
-	conn := pool.Get()
-
-	in := htt.StreamIn(owner, name, conn)
+	in := htt.StreamIn(owner, name)
 
 	defer in.Close()
 
@@ -57,10 +49,8 @@ func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) 
 	parts := strings.Split(r.URL.Path[1:], "/")
 	owner, name := parts[0], parts[1]
 
-	conn := pool.Get()
-
 	responseStarted := false
-	out := htt.StreamOut(owner, name, conn)
+	out := htt.StreamOut(owner, name)
 
 	defer out.Close()
 
@@ -107,28 +97,8 @@ func playbackSSE(h http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	h(htt.SSEWriter(w), r)
 }
 
-func redisPool(url string) *redis.Pool {
-	return &redis.Pool{
-		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", url)
-		},
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
-		},
-	}
-}
-
 func main() {
-	c := htt.NewConfig()
-
-	pool = redisPool(c.RedisUrl)
-
-	conn := pool.Get()
-
-	if _, err := conn.Do("PING"); err != nil {
-		panic(err)
-	}
+	c := htt.Configure()
 
 	s := htt.Stack{
 		htt.If(htt.IsStreamPath, htt.Stack{

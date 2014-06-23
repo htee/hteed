@@ -6,13 +6,17 @@ import (
 	"os"
 )
 
+var (
+	callbacks = make([]func(*Config), 0)
+)
+
 type Config struct {
 	Addr     string
 	Port     int
 	RedisUrl string
 }
 
-func NewConfig() *Config {
+func Configure() *Config {
 	c := new(Config)
 
 	addr := flag.String("address", "0.0.0.0", "Bind to host address (default is 0.0.0.0)")
@@ -41,5 +45,13 @@ func NewConfig() *Config {
 		c.RedisUrl = ":6379"
 	}
 
+	for _, cb := range callbacks {
+		cb(c)
+	}
+
 	return c
+}
+
+func ConfigCallback(cb func(*Config)) {
+	callbacks = append(callbacks, cb)
 }
