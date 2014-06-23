@@ -63,7 +63,6 @@ func newStream(owner, name string) *stream {
 		name:  name,
 		conn:  pool.Get(),
 		data:  make(chan []byte),
-		fin:   make(chan bool),
 		err:   make(chan error),
 	}
 }
@@ -95,7 +94,6 @@ type stream struct {
 
 	data chan []byte
 
-	fin chan bool
 	err chan error
 }
 
@@ -103,7 +101,7 @@ func (s *stream) Owner() string { return s.owner }
 
 func (s *stream) Name() string { return s.name }
 
-func (s *stream) Close() { s.fin <- true }
+func (s *stream) Close() { close(s.data) }
 
 func (s *stream) Errors() <-chan error { return s.err }
 
@@ -120,12 +118,9 @@ func (s *stream) streamIn() {
 			if ok {
 				s.append(buf)
 			} else {
-				s.close()
+				s.closeIn()
 				return
 			}
-		case <-s.fin:
-			s.close()
-			return
 		}
 	}
 }
@@ -152,7 +147,7 @@ func (s *stream) append(buf []byte) {
 	}
 }
 
-func (s *stream) close() {
+func (s *stream) closeIn() {
 	s.conn.Send("MULTI")
 	s.conn.Send("SET", s.stateKey(), Closed)
 	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
@@ -196,7 +191,6 @@ func (s *stream) streamChannel() {
 			state, data := State(v.Data[0]), v.Data[1:]
 
 			if state == Closed {
-				close(s.data)
 				return
 			} else {
 				s.data <- data

@@ -13,6 +13,7 @@ func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	owner, name := parseNWO(r.URL.Path)
 
 	in := htt.StreamIn(owner, name)
+	inc := in.In()
 
 	defer in.Close()
 
@@ -26,10 +27,9 @@ func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 		default:
 			buf := make([]byte, 4096)
 
-			if n, err := r.Body.Read(buf); err == io.EOF {
+			if n, err := r.Body.Read(buf); err == io.EOF || err == io.ErrUnexpectedEOF {
 				w.WriteHeader(204)
 				w.(http.Flusher).Flush()
-				close(in.In())
 
 				return
 			} else if err != nil {
@@ -38,7 +38,7 @@ func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 
 				return
 			} else {
-				in.In() <- buf[:n]
+				inc <- buf[:n]
 			}
 		}
 	}
