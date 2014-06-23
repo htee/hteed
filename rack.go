@@ -1,4 +1,4 @@
-package rack
+package htt
 
 import (
 	"strings"

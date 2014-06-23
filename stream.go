@@ -1,4 +1,4 @@
-package stream
+package htt
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ const (
 	Closed
 )
 
-func In(owner, name string, conn redis.Conn) InStream {
+func StreamIn(owner, name string, conn redis.Conn) InStream {
 	s := stream{owner, name, conn, make(chan []byte), make(chan bool), make(chan error)}
 
 	go s.streamIn()
@@ -21,7 +21,7 @@ func In(owner, name string, conn redis.Conn) InStream {
 	return s
 }
 
-func Out(owner, name string, conn redis.Conn) OutStream {
+func StreamOut(owner, name string, conn redis.Conn) OutStream {
 	s := stream{owner, name, conn, make(chan []byte), make(chan bool), make(chan error)}
 
 	go s.streamOut()

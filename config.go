@@ -1,4 +1,4 @@
-package config
+package htt
 
 import (
 	"flag"
@@ -12,7 +12,7 @@ type Config struct {
 	RedisUrl string
 }
 
-func New() *Config {
+func NewConfig() *Config {
 	c := new(Config)
 
 	addr := flag.String("address", "0.0.0.0", "Bind to host address (default is 0.0.0.0)")
