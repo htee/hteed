@@ -10,8 +10,7 @@ import (
 )
 
 func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path[1:], "/")
-	owner, name := parts[0], parts[1]
+	owner, name := parseNWO(r.URL.Path)
 
 	in := htt.StreamIn(owner, name)
 
@@ -46,8 +45,7 @@ func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 }
 
 func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path[1:], "/")
-	owner, name := parts[0], parts[1]
+	owner, name := parseNWO(r.URL.Path)
 
 	responseStarted := false
 	out := htt.StreamOut(owner, name)
@@ -95,6 +93,13 @@ func playbackSSE(h http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	hdr.Set("Connection", "close")
 
 	h(htt.SSEWriter(w), r)
+}
+
+func parseNWO(path string) (owner, name string) {
+	parts := strings.Split(path[1:], "/")
+	owner, name = parts[0], parts[1]
+
+	return
 }
 
 func main() {
