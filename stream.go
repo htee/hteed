@@ -137,6 +137,7 @@ func (s *stream) streamIn() {
 
 func (s *stream) streamOut() {
 	defer s.conn.Close()
+	defer s.Close()
 
 	if state, err := s.getState(); err != nil {
 		s.err <- err
@@ -205,7 +206,6 @@ func (s *stream) streamChannel() {
 			state, data := State(v.Data[0]), v.Data[1:]
 
 			if state == Closed {
-				s.Close()
 				return
 			} else {
 				s.data <- data
