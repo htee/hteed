@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/benburkert/http"
+	"github.com/benburkert/htee/http"
 	"github.com/nu7hatch/gouuid"
 )
 
