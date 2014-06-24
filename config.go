@@ -55,3 +55,17 @@ func Configure() *Config {
 func ConfigCallback(cb func(*Config)) {
 	callbacks = append(callbacks, cb)
 }
+
+func testConfigure() *Config {
+	c := &Config{
+		Addr:     "127.0.0.1",
+		Port:     3000,
+		RedisUrl: "127.0.0.1:6379",
+	}
+
+	for _, cb := range callbacks {
+		cb(c)
+	}
+
+	return c
+}
