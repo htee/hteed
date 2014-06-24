@@ -76,13 +76,6 @@ func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) 
 				w.Write(data)
 				w.(http.Flusher).Flush()
 			} else {
-				hj, _ := w.(http.Hijacker)
-				c, bufrw, _ := hj.Hijack()
-
-				bufrw.WriteString("0\r\n\r\n")
-				bufrw.Flush()
-				c.Close()
-
 				return
 			}
 		}
