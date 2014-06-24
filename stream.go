@@ -59,11 +59,12 @@ func StreamOut(owner, name string) OutStream {
 
 func newStream(owner, name string) *stream {
 	return &stream{
-		owner: owner,
-		name:  name,
-		conn:  pool.Get(),
-		data:  make(chan []byte),
-		err:   make(chan error),
+		owner:  owner,
+		name:   name,
+		conn:   pool.Get(),
+		data:   make(chan []byte),
+		err:    make(chan error),
+		closed: false,
 	}
 }
 
@@ -95,19 +96,28 @@ type stream struct {
 	data chan []byte
 
 	err chan error
+
+	closed bool
 }
 
 func (s *stream) Owner() string { return s.owner }
 
 func (s *stream) Name() string { return s.name }
 
-func (s *stream) Close() { close(s.data) }
-
 func (s *stream) Errors() <-chan error { return s.err }
 
 func (s *stream) In() chan<- []byte { return s.data }
 
 func (s *stream) Out() <-chan []byte { return s.data }
+
+func (s *stream) Close() {
+	if s.closed {
+		return
+	}
+
+	s.closed = true
+	close(s.data)
+}
 
 func (s *stream) streamIn() {
 	defer s.conn.Close()
@@ -186,11 +196,16 @@ func (s *stream) streamChannel() {
 	psc := redis.PubSubConn{s.conn}
 
 	for {
+		if s.closed {
+			return
+		}
+
 		switch v := psc.Receive().(type) {
 		case redis.Message:
 			state, data := State(v.Data[0]), v.Data[1:]
 
 			if state == Closed {
+				s.Close()
 				return
 			} else {
 				s.data <- data

@@ -36,6 +36,10 @@ func (r SSEResponse) Close() {
 	r.writeCtrl("eof")
 }
 
+func (r SSEResponse) CloseNotify() <-chan bool {
+	return r.w.(http.CloseNotifier).CloseNotify()
+}
+
 func (r SSEResponse) Write(buf []byte) (int, error) {
 	count := 0
 	var err error = nil

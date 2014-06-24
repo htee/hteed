@@ -49,6 +49,7 @@ func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) 
 
 	responseStarted := false
 	out := htt.StreamOut(owner, name)
+	cc := w.(http.CloseNotifier).CloseNotify()
 
 	defer out.Close()
 
@@ -61,6 +62,8 @@ func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) 
 				w.WriteHeader(500)
 			}
 
+			return
+		case <-cc:
 			return
 		case data, ok := <-out.Out():
 			if ok {
