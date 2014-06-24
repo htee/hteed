@@ -5,7 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/benburkert/http"
+	"github.com/benburkert/htee"
+	"github.com/benburkert/htee/http"
 )
 
 func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {

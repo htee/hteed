@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/benburkert/http"
+	"github.com/benburkert/htee/http"
 )
 
 func SetupSSE(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {

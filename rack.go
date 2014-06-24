@@ -3,7 +3,7 @@ package htee
 import (
 	"strings"
 
-	"github.com/benburkert/http"
+	"github.com/benburkert/htee/http"
 )
 
 type MiddlewareFunc func(http.HandlerFunc, http.ResponseWriter, *http.Request)
