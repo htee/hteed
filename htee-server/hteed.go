@@ -5,14 +5,13 @@ import (
 	"io"
 	"strings"
 
-	"github.com/benburkert/htt"
 	"github.com/benburkert/http"
 )
 
 func recordStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	owner, name := parseNWO(r.URL.Path)
 
-	in := htt.StreamIn(owner, name)
+	in := htee.StreamIn(owner, name)
 	inc := in.In()
 
 	defer in.Close()
@@ -48,7 +47,7 @@ func playbackStream(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) 
 	owner, name := parseNWO(r.URL.Path)
 
 	responseStarted := false
-	out := htt.StreamOut(owner, name)
+	out := htee.StreamOut(owner, name)
 	cc := w.(http.CloseNotifier).CloseNotify()
 
 	defer out.Close()
@@ -95,7 +94,7 @@ func playbackSSE(h http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	hdr.Set("Cache-Control", "no-cache")
 	hdr.Set("Connection", "close")
 
-	h(htt.SSEWriter(w), r)
+	h(htee.SSEWriter(w), r)
 }
 
 func parseNWO(path string) (owner, name string) {
@@ -106,17 +105,17 @@ func parseNWO(path string) (owner, name string) {
 }
 
 func main() {
-	c := htt.Configure()
+	c := htee.Configure()
 
-	s := htt.Stack{
-		htt.If(htt.IsStreamPath, htt.Stack{
-			htt.If(htt.IsChunkedPost, htt.Stack{htt.Build(recordStream)}),
-			htt.If(htt.IsSSE, htt.Stack{
-				htt.Build(playbackSSE),
-				htt.Build(playbackStream)}),
-			htt.If(htt.IsBrowser, htt.Stack{htt.Build(htt.SetupSSE)}),
-			htt.If(htt.IsGet, htt.Stack{htt.Build(playbackStream)}),
+	s := htee.Stack{
+		htee.If(htee.IsStreamPath, htee.Stack{
+			htee.If(htee.IsChunkedPost, htee.Stack{htee.Build(recordStream)}),
+			htee.If(htee.IsSSE, htee.Stack{
+				htee.Build(playbackSSE),
+				htee.Build(playbackStream)}),
+			htee.If(htee.IsBrowser, htee.Stack{htee.Build(htee.SetupSSE)}),
+			htee.If(htee.IsGet, htee.Stack{htee.Build(playbackStream)}),
 		})}
 
-	htt.ListenAndServe(c.Addr, s)
+	htee.ListenAndServe(c.Addr, s)
 }
