@@ -2,10 +2,9 @@ package htee
 
 import (
 	"io"
+	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/benburkert/htee/http"
 )
 
 func testClient(endpoint string) *Client {

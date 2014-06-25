@@ -6,10 +6,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	hteetp "github.com/benburkert/htee/http"
 )
 
 func init() {
@@ -120,7 +119,7 @@ func TestStreamingFanout(t *testing.T) {
 
 	step <- true
 
-	responses := make([](*hteetp.Response), peers)
+	responses := make([](*http.Response), peers)
 	for i := range responses {
 		if res, err := client.GetStream(client.Username, "fanout"); err != nil {
 			t.Error(err)

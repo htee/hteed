@@ -1,9 +1,8 @@
 package htee
 
 import (
+	"net/http"
 	"strings"
-
-	"github.com/benburkert/htee/http"
 )
 
 type MiddlewareFunc func(http.HandlerFunc, http.ResponseWriter, *http.Request)

@@ -3,8 +3,7 @@ package htee
 import (
 	"bytes"
 	"fmt"
-
-	"github.com/benburkert/htee/http"
+	"net/http"
 )
 
 func SetupSSE(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
