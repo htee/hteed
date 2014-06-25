@@ -8,6 +8,8 @@ import (
 	"io/ioutil"
 	"net/http/httptest"
 	"testing"
+
+	hteetp "github.com/benburkert/htee/http"
 )
 
 func init() {
@@ -77,9 +79,59 @@ func TestStreamingLockstep(t *testing.T) {
 	for i := 1; i <= parts; i++ {
 		n, err := res.Body.Read(buf)
 		if err != nil {
-			t.Error(err)
+			if err != io.EOF {
+				t.Error(err)
+			}
 		} else if string(buf[:n]) != fmt.Sprintf("Part %d", i) {
 			t.Errorf("Response part is '%s', want 'Part %d'", buf[:n], i)
+		}
+
+		step <- true
+	}
+}
+
+func TestStreamingFanout(t *testing.T) {
+	ts := httptest.NewServer(ServerHandler())
+	defer ts.Close()
+
+	client := testClient(ts.URL)
+	pr, pw := io.Pipe()
+	step, parts, peers := make(chan interface{}), 1000, 100
+
+	go func() {
+		if _, err := client.PostStream("fanout", pr); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	go func() {
+		for i := 1; i <= parts; i++ {
+			pw.Write([]byte(fmt.Sprintf("Part %d", i)))
+			<-step
+		}
+		pw.Close()
+	}()
+
+	responses := make([](*hteetp.Response), peers)
+	for i := range responses {
+		if res, err := client.GetStream(client.Username, "fanout"); err != nil {
+			t.Error(err)
+		} else {
+			responses[i] = res
+		}
+	}
+
+	buf := make([]byte, 4096)
+	for i := 1; i <= parts; i++ {
+		for j, res := range responses {
+			n, err := res.Body.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					t.Error(err)
+				}
+			} else if string(buf[:n]) != fmt.Sprintf("Part %d", i) {
+				t.Errorf("Response %d part is '%s', want 'Part %d'", j, buf[:n], i)
+			}
 		}
 
 		step <- true
