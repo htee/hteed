@@ -46,29 +46,36 @@ func (c *Client) PostStream(name string, body io.ReadCloser) (*http.Response, er
 }
 
 func buildGet(url *url.URL) *http.Request {
-	return buildRequest("GET", url, nil)
+	return buildRequest("GET", url, defaultHeader(), nil)
 }
 
 func buildPost(url *url.URL, body io.ReadCloser) *http.Request {
-	return buildRequest("POST", url, body)
+	hdr := defaultHeader()
+	hdr.Set("Expect", "100-Continue")
+
+	return buildRequest("POST", url, hdr, body)
 }
 
-func buildRequest(method string, url *url.URL, body io.ReadCloser) *http.Request {
+func buildRequest(method string, url *url.URL, hdr http.Header, body io.ReadCloser) *http.Request {
 	return &http.Request{
-		Method:     method,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		URL:        url,
-		Body:       body,
-		Header: http.Header{
-			"Transfer-Encoding": {"chunked"},
-			"Connection":        {"Keep-Alive"},
-		},
+		Method:           method,
+		Proto:            "HTTP/1.1",
+		ProtoMajor:       1,
+		ProtoMinor:       1,
+		URL:              url,
+		Body:             body,
+		Header:           hdr,
 		TransferEncoding: []string{"chunked"},
 	}
 }
 
 func buildNWO(owner, name string) string {
 	return strings.Join([]string{owner, name}, "/")
+}
+
+func defaultHeader() http.Header {
+	return http.Header{
+		"Transfer-Encoding": {"chunked"},
+		"Connection":        {"Keep-Alive"},
+	}
 }
