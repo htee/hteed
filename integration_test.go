@@ -44,7 +44,7 @@ func TestHelloWorldRoundTrip(t *testing.T) {
 	}
 
 	if string(rb) != "Hello, World!" {
-		t.Errorf("Response body is '%s', want 'Hello, World!'", rb)
+		t.Errorf("response body is '%s', want 'Hello, World!'", rb)
 	}
 }
 
@@ -64,11 +64,15 @@ func TestStreamingLockstep(t *testing.T) {
 
 	go func() {
 		for i := 1; i <= parts; i++ {
-			pw.Write([]byte(fmt.Sprintf("Part %d", i)))
 			<-step
+			pw.Write([]byte(fmt.Sprintf("Part %d", i)))
 		}
 		pw.Close()
+
+		<-step
 	}()
+
+	step <- true
 
 	res, err := client.GetStream(client.Username, "lockstep")
 	if err != nil {
@@ -83,7 +87,7 @@ func TestStreamingLockstep(t *testing.T) {
 				t.Error(err)
 			}
 		} else if string(buf[:n]) != fmt.Sprintf("Part %d", i) {
-			t.Errorf("Response part is '%s', want 'Part %d'", buf[:n], i)
+			t.Errorf("response part is '%s', want 'Part %d'", buf[:n], i)
 		}
 
 		step <- true
@@ -106,11 +110,15 @@ func TestStreamingFanout(t *testing.T) {
 
 	go func() {
 		for i := 1; i <= parts; i++ {
-			pw.Write([]byte(fmt.Sprintf("Part %d", i)))
 			<-step
+			pw.Write([]byte(fmt.Sprintf("Part %d", i)))
 		}
 		pw.Close()
+
+		<-step
 	}()
+
+	step <- true
 
 	responses := make([](*hteetp.Response), peers)
 	for i := range responses {
@@ -130,7 +138,7 @@ func TestStreamingFanout(t *testing.T) {
 					t.Error(err)
 				}
 			} else if string(buf[:n]) != fmt.Sprintf("Part %d", i) {
-				t.Errorf("Response %d part is '%s', want 'Part %d'", j, buf[:n], i)
+				t.Errorf("response %d part is '%s', want 'Part %d'", j, buf[:n], i)
 			}
 		}
 

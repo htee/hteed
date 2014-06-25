@@ -122,6 +122,11 @@ func (s *stream) Close() {
 func (s *stream) streamIn() {
 	defer s.conn.Close()
 
+	if _, err := s.conn.Do("SET", s.stateKey(), Opened); err != nil {
+		s.err <- err
+		return
+	}
+
 	for {
 		select {
 		case buf, ok := <-s.data:
