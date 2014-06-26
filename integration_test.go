@@ -56,22 +56,16 @@ func TestStreamingLockstep(t *testing.T) {
 	step, parts := make(chan interface{}), 100
 
 	go func() {
-		if _, err := client.PostStream("lockstep", pr); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	go func() {
 		for i := 1; i <= parts; i++ {
-			<-step
 			pw.Write([]byte(fmt.Sprintf("Part %d", i)))
+			<-step
 		}
 		pw.Close()
-
-		<-step
 	}()
 
-	step <- true
+	if _, err := client.PostStream("lockstep", pr); err != nil {
+		t.Error(err)
+	}
 
 	res, err := client.GetStream(client.Username, "lockstep")
 	if err != nil {
@@ -102,22 +96,16 @@ func TestStreamingFanout(t *testing.T) {
 	step, parts, peers := make(chan interface{}), 1000, 100
 
 	go func() {
-		if _, err := client.PostStream("fanout", pr); err != nil {
-			t.Error(err)
-		}
-	}()
-
-	go func() {
 		for i := 1; i <= parts; i++ {
-			<-step
 			pw.Write([]byte(fmt.Sprintf("Part %d", i)))
+			<-step
 		}
 		pw.Close()
-
-		<-step
 	}()
 
-	step <- true
+	if _, err := client.PostStream("fanout", pr); err != nil {
+		t.Error(err)
+	}
 
 	responses := make([](*http.Response), peers)
 	for i := range responses {

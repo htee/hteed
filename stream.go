@@ -144,12 +144,24 @@ func (s *stream) streamOut() {
 	defer s.conn.Close()
 	defer s.Close()
 
-	if state, err := s.getState(); err != nil {
+	var state State
+	var buf []byte
+
+	s.conn.Send("MULTI")
+	s.conn.Send("GET", s.stateKey())
+	s.conn.Send("GET", s.dataKey())
+	s.conn.Send("SUBSCRIBE", s.streamKey())
+
+	if data, err := redis.Values(s.conn.Do("EXEC")); err != nil {
 		s.err <- err
-	} else if state == Opened {
-		s.streamData()
 	} else {
-		s.sendData()
+		redis.Scan(data, &state, &buf)
+
+		s.data <- buf
+
+		if state == Opened {
+			s.streamChannel()
+		}
 	}
 }
 
@@ -169,32 +181,6 @@ func (s *stream) closeIn() {
 	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
 	if _, err := s.conn.Do("EXEC"); err != nil {
 		s.err <- err
-	}
-}
-
-func (s *stream) sendData() {
-	if data, err := redis.String(s.conn.Do("GET", s.dataKey())); err != nil {
-		s.err <- err
-	} else {
-		s.data <- []byte(data)
-	}
-}
-
-func (s *stream) streamData() {
-	var buf []byte
-
-	s.conn.Send("MULTI")
-	s.conn.Send("GET", s.dataKey())
-	s.conn.Send("SUBSCRIBE", s.streamKey())
-
-	if data, err := redis.Values(s.conn.Do("EXEC")); err != nil {
-		s.err <- err
-	} else {
-		redis.Scan(data, &buf)
-
-		s.data <- buf
-
-		s.streamChannel()
 	}
 }
 
