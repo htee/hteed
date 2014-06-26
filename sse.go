@@ -4,7 +4,21 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strconv"
 )
+
+func formatSSEData(uc <-chan []byte) <-chan string {
+	ec := make(chan string)
+
+	go func() {
+		for buf := range uc {
+			str := strconv.Quote(string(buf))
+			ec <- "data:" + str[1:len(str)-1] + "\n"
+		}
+	}()
+
+	return ec
+}
 
 func SetupSSE(_ http.HandlerFunc, w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(200)
