@@ -43,6 +43,7 @@ func configure(cnf *Config) {
 
 func StreamIn(owner, name string) InStream {
 	s := newStream(owner, name)
+	s.open()
 
 	go s.streamIn()
 
@@ -119,13 +120,14 @@ func (s *stream) Close() {
 	close(s.data)
 }
 
-func (s *stream) streamIn() {
-	defer s.conn.Close()
-
+func (s *stream) open() {
 	if _, err := s.conn.Do("SET", s.stateKey(), Opened); err != nil {
 		s.err <- err
-		return
 	}
+}
+
+func (s *stream) streamIn() {
+	defer s.conn.Close()
 
 	for {
 		select {

@@ -87,7 +87,7 @@ func TestStreamingLockstep(t *testing.T) {
 	}
 }
 
-func TestStreamingFanout(t *testing.T) {
+func TestStreamingFanOut(t *testing.T) {
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
@@ -131,4 +131,69 @@ func TestStreamingFanout(t *testing.T) {
 
 		step <- true
 	}
+}
+
+func TestStreamingFanIn(t *testing.T) {
+	ts := httptest.NewServer(ServerHandler())
+	defer ts.Close()
+
+	step, parts, peers := make(chan interface{}), 1000, 100
+
+	clients := make([](*Client), peers)
+	writers := make([](*io.PipeWriter), peers)
+	readers := make([](*io.PipeReader), peers)
+
+	for i := range writers {
+		client := testClient(ts.URL)
+		pr, pw := io.Pipe()
+
+		clients[i] = client
+		writers[i] = pw
+		readers[i] = pr
+	}
+
+	go func() {
+		for i := 1; i <= parts; i++ {
+			for j := 0; j < peers; j++ {
+				writers[j].Write([]byte(fmt.Sprintf("Peer %d Part %d", i, j)))
+				<-step
+			}
+		}
+
+		for i := 0; i < peers; i++ {
+			writers[i].Close()
+		}
+	}()
+
+	go func() {
+		for i, client := range clients {
+			if _, err := client.PostStream("fanin", readers[i]); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+
+	client := testClient(ts.URL)
+
+	res, err := client.GetStream(client.Username, "fanin")
+	if err != nil {
+		t.Error(err)
+	}
+
+	buf := make([]byte, 4096)
+	for i := 1; i <= parts; i++ {
+		for j := 0; j < peers; j++ {
+			n, err := res.Body.Read(buf)
+			if err != nil {
+				if err != io.EOF {
+					t.Error(err)
+				}
+			} else if string(buf[:n]) != fmt.Sprintf("Peer %d Part %d", i, j) {
+				t.Errorf("response %d part is '%s', want 'Part %d'", j, buf[:n], i)
+			}
+
+			step <- true
+		}
+	}
+
 }

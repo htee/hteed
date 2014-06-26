@@ -25,6 +25,11 @@ func recordStream(w http.ResponseWriter, r *http.Request) {
 	owner := vars["owner"]
 	name := vars["name"]
 
+	in := StreamIn(owner, name)
+	inc := in.In()
+
+	defer in.Close()
+
 	if r.ExpectsContinue() {
 		loc, err := absURL(r, fmt.Sprintf("/%s/%s", owner, name))
 		if err != nil {
@@ -34,11 +39,6 @@ func recordStream(w http.ResponseWriter, r *http.Request) {
 
 		w.ContinueHeader().Set("Location", loc.String())
 	}
-
-	in := StreamIn(owner, name)
-	inc := in.In()
-
-	defer in.Close()
 
 	for {
 		select {
