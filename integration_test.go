@@ -197,3 +197,54 @@ func TestStreamingFanIn(t *testing.T) {
 	}
 
 }
+
+func TestEventStreamRequest(t *testing.T) {
+	ts := httptest.NewServer(ServerHandler())
+	defer ts.Close()
+
+	client, name := testClient(ts.URL), "sse"
+	pr, pw := io.Pipe()
+	chunks := []string{"Testing", " a ", "multi-chunk", " stream"}
+	step := make(chan interface{})
+
+	go func() {
+		for _, chunk := range chunks {
+			pw.Write([]byte(chunk))
+			<-step
+		}
+
+		pw.Close()
+	}()
+
+	cntRes, err := client.PostStream(name, pr)
+	if err != nil {
+		t.Error(err)
+	}
+
+	req, err := http.NewRequest("GET", ts.URL+cntRes.Header.Get("Location"), nil)
+	if err != nil {
+		t.Error(err)
+	}
+	req.Header.Add("Content-Type", "text/event-stream")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Error(err)
+	}
+
+	buf := make([]byte, 4096)
+	for _, chunk := range chunks {
+		if n, err := res.Body.Read(buf); err != nil {
+			if err != io.EOF {
+				t.Error(err)
+			}
+			break
+		} else {
+			if dc := fmt.Sprintf("data:%s\n", chunk); string(buf[:n]) != dc {
+				t.Errorf("response part is %q, want %q", buf[:n], dc)
+			}
+		}
+
+		step <- true
+	}
+}

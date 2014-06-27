@@ -4,23 +4,34 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"path"
+
 	"strings"
 
 	"github.com/gorilla/mux"
 )
 
 func ServerHandler() http.Handler {
-	r := mux.NewRouter()
+	s := &server{r: mux.NewRouter()}
 
-	r.HandleFunc("/{owner}/{name}", recordStream).Methods("POST")
-	r.HandleFunc("/{owner}/{name}", playbackStream).Methods("GET")
+	s.r.HandleFunc("/{owner}/{name}", playbackSSEStream).
+		Methods("GET").
+		Headers("Content-Type", "text/event-stream")
+	s.r.HandleFunc("/{owner}/{name}", sendSSEShell).
+		Methods("GET").
+		MatcherFunc(isBrowser)
+	s.r.HandleFunc("/{owner}/{name}", s.recordStream).
+		Methods("POST")
+	s.r.HandleFunc("/{owner}/{name}", s.playbackStream).
+		Methods("GET").Name("stream")
 
-	return r
+	return s.r
 }
 
-func recordStream(w http.ResponseWriter, r *http.Request) {
+type server struct {
+	r *mux.Router
+}
+
+func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	owner := vars["owner"]
 	name := vars["name"]
@@ -31,7 +42,7 @@ func recordStream(w http.ResponseWriter, r *http.Request) {
 	defer in.Close()
 
 	if r.ExpectsContinue() {
-		loc, err := absURL(r, fmt.Sprintf("/%s/%s", owner, name))
+		loc, err := s.r.Get("stream").URL("owner", owner, "name", name)
 		if err != nil {
 			fmt.Println(err.Error())
 			w.WriteHeader(500)
@@ -69,7 +80,7 @@ func recordStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func playbackStream(w http.ResponseWriter, r *http.Request) {
+func (_ *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	owner := vars["owner"]
 	name := vars["name"]
@@ -109,50 +120,9 @@ func playbackStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func absURL(r *http.Request, urlStr string) (*url.URL, error) {
-	if u, err := url.Parse(urlStr); err == nil {
-		// If url was relative, make absolute by
-		// combining with request path.
-		// The browser would probably do this for us,
-		// but doing it ourselves is more reliable.
+func isBrowser(r *http.Request, rm *mux.RouteMatch) bool {
+	hdrs := r.Header
 
-		// NOTE(rsc): RFC 2616 says that the Location
-		// line must be an absolute URI, like
-		// "http://www.google.com/redirect/",
-		// not a path like "/redirect/".
-		// Unfortunately, we don't know what to
-		// put in the host name section to get the
-		// client to connect to us again, so we can't
-		// know the right absolute URI to send back.
-		// Because of this problem, no one pays attention
-		// to the RFC; they all send back just a new path.
-		// So do we.
-		oldpath := r.URL.Path
-		if oldpath == "" { // should not happen, but avoid a crash if it does
-			oldpath = "/"
-		}
-		if u.Scheme == "" {
-			// no leading http://server
-			if urlStr == "" || urlStr[0] != '/' {
-				// make relative path absolute
-				olddir, _ := path.Split(oldpath)
-				urlStr = olddir + urlStr
-			}
-
-			var query string
-			if i := strings.Index(urlStr, "?"); i != -1 {
-				urlStr, query = urlStr[:i], urlStr[i:]
-			}
-
-			// clean up but preserve trailing slash
-			trailing := strings.HasSuffix(urlStr, "/")
-			urlStr = path.Clean(urlStr)
-			if trailing && !strings.HasSuffix(urlStr, "/") {
-				urlStr += "/"
-			}
-			urlStr += query
-		}
-	}
-
-	return url.Parse(urlStr)
+	return strings.Contains(hdrs["User-Agent"][0], "WebKit") &&
+		strings.Contains(hdrs["Accept"][0], "text/html")
 }
