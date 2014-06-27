@@ -7,6 +7,19 @@ import (
 	"strings"
 )
 
+func NewClient(endpoint, username string) (*Client, error) {
+	url, err := url.ParseRequestURI(endpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		c:        &http.Client{},
+		Endpoint: url,
+		Username: username,
+	}, nil
+}
+
 func testClient(endpoint string) *Client {
 	url, err := url.ParseRequestURI(endpoint)
 	if err != nil {
@@ -15,7 +28,7 @@ func testClient(endpoint string) *Client {
 
 	return &Client{
 		c:        &http.Client{},
-		endpoint: url,
+		Endpoint: url,
 		Username: "test",
 	}
 }
@@ -23,12 +36,12 @@ func testClient(endpoint string) *Client {
 type Client struct {
 	c *http.Client
 
-	endpoint *url.URL
+	Endpoint *url.URL
 	Username string
 }
 
 func (c *Client) GetStream(owner, name string) (*http.Response, error) {
-	url, err := c.endpoint.Parse(buildNWO(owner, name))
+	url, err := c.Endpoint.Parse(buildNWO(owner, name))
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +50,7 @@ func (c *Client) GetStream(owner, name string) (*http.Response, error) {
 }
 
 func (c *Client) PostStream(name string, body io.ReadCloser) (*http.Response, error) {
-	url, err := c.endpoint.Parse(buildNWO(c.Username, name))
+	url, err := c.Endpoint.Parse(buildNWO(c.Username, name))
 	if err != nil {
 		return nil, err
 	}
