@@ -3,7 +3,7 @@ package htee
 import (
 	"fmt"
 	"net/http"
-	"strconv"
+	"net/url"
 
 	"github.com/gorilla/mux"
 )
@@ -17,6 +17,11 @@ func playbackSSEStream(w http.ResponseWriter, r *http.Request) {
 	out := StreamOut(owner, name)
 	sseOut := formatSSEData(out.Out())
 	cc := w.(http.CloseNotifier).CloseNotify()
+
+	hdr := w.Header()
+	hdr.Set("Content-Type", "text/event-stream")
+	hdr.Set("Cache-Control", "no-cache")
+	hdr.Set("Connection", "close")
 
 	defer out.Close()
 
@@ -43,6 +48,8 @@ func playbackSSEStream(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte(data))
 				w.(http.Flusher).Flush()
 			} else {
+				w.Write([]byte("event:eof\n"))
+				w.(http.Flusher).Flush()
 				return
 			}
 		}
@@ -59,8 +66,7 @@ func formatSSEData(uc <-chan []byte) <-chan string {
 
 	go func() {
 		for buf := range uc {
-			str := strconv.Quote(string(buf))
-			ec <- "data:" + str[1:len(str)-1] + "\n"
+			ec <- "data:" + url.QueryEscape(string(buf)) + "\n\n"
 		}
 
 		close(ec)
@@ -84,13 +90,7 @@ const SSEShell = `
     var resetLine = false;
 
     function append(data) {
-      if(resetLine == true) {
-        cursor.innerHTML = data;
-      } else {
-        cursor.innerHTML += data;
-      }
-
-      resetLine = false;
+      cursor.innerHTML += decodeURIComponent(data);
     }
 
     source.onmessage = function(e) {
@@ -101,17 +101,8 @@ const SSEShell = `
       console.log(e);
     };
 
-    source.addEventListener('ctrl', function(e) {
-      if(e.data == 'newline') {
-        append("\n");
-        cursor = $("<code></code>").insertAfter(cursor)[0];
-      } else if(e.data == 'crlf' || e.data == 'carriage-return') {
-        resetLine = true;
-      } else if(e.data == 'eof') {
-        source.close();
-      } else {
-        console.log(e);
-      }
+    source.addEventListener('eof', function(e) {
+      source.close();
     }, false);
 
     window.setInterval(function(){

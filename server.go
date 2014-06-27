@@ -15,7 +15,7 @@ func ServerHandler() http.Handler {
 
 	s.r.HandleFunc("/{owner}/{name}", playbackSSEStream).
 		Methods("GET").
-		Headers("Content-Type", "text/event-stream")
+		Headers("Accept", "text/event-stream")
 	s.r.HandleFunc("/{owner}/{name}", sendSSEShell).
 		Methods("GET").
 		MatcherFunc(isBrowser)
@@ -121,8 +121,8 @@ func (_ *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func isBrowser(r *http.Request, rm *mux.RouteMatch) bool {
-	hdrs := r.Header
+	hdr := r.Header
 
-	return strings.Contains(hdrs["User-Agent"][0], "WebKit") &&
-		strings.Contains(hdrs["Accept"][0], "text/html")
+	return strings.Contains(hdr.Get("User-Agent"), "WebKit") &&
+		strings.Contains(hdr.Get("Accept"), "text/html")
 }

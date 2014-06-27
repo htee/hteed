@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 )
 
@@ -225,7 +226,7 @@ func TestEventStreamRequest(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	req.Header.Add("Content-Type", "text/event-stream")
+	req.Header.Add("Accept", "text/event-stream")
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -240,7 +241,7 @@ func TestEventStreamRequest(t *testing.T) {
 			}
 			break
 		} else {
-			if dc := fmt.Sprintf("data:%s\n", chunk); string(buf[:n]) != dc {
+			if dc := fmt.Sprintf("data:%s\n\n", url.QueryEscape(chunk)); string(buf[:n]) != dc {
 				t.Errorf("response part is %q, want %q", buf[:n], dc)
 			}
 		}
