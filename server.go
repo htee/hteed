@@ -89,8 +89,6 @@ func (_ *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 	out := StreamOut(owner, name)
 	cc := w.(http.CloseNotifier).CloseNotify()
 
-	defer out.Close()
-
 	for {
 		select {
 		case err := <-out.Errors():
