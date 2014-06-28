@@ -17,6 +17,8 @@ func init() {
 }
 
 func TestHelloWorldRoundTrip(t *testing.T) {
+	defer delTestData()
+
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
@@ -49,6 +51,8 @@ func TestHelloWorldRoundTrip(t *testing.T) {
 }
 
 func TestStreamingLockstep(t *testing.T) {
+	defer delTestData()
+
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
@@ -89,6 +93,8 @@ func TestStreamingLockstep(t *testing.T) {
 }
 
 func TestStreamingFanOut(t *testing.T) {
+	defer delTestData()
+
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
@@ -135,6 +141,8 @@ func TestStreamingFanOut(t *testing.T) {
 }
 
 func TestStreamingFanIn(t *testing.T) {
+	defer delTestData()
+
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
@@ -200,6 +208,8 @@ func TestStreamingFanIn(t *testing.T) {
 }
 
 func TestEventStreamRequest(t *testing.T) {
+	defer delTestData()
+
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 

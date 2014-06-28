@@ -231,3 +231,16 @@ func (s *stream) dataKey() string { return keyPrefix + "data:" + s.nwo() }
 func (s *stream) streamKey() string { return keyPrefix + s.nwo() }
 
 func (s *stream) nwo() string { return s.owner + "/" + s.name }
+
+func delTestData() {
+	conn := pool.Get()
+
+	keys, err := redis.Strings(conn.Do("KEYS", keyPrefix+"*"))
+	if err != nil {
+		panic(err)
+	}
+
+	for _, key := range keys {
+		conn.Do("DEL", key)
+	}
+}
