@@ -11,9 +11,10 @@ var (
 )
 
 type Config struct {
-	Addr     string
-	Port     int
-	RedisUrl string
+	Addr      string
+	Port      int
+	RedisUrl  string
+	KeyPrefix string
 }
 
 func Configure() *Config {
@@ -58,9 +59,10 @@ func ConfigCallback(cb func(*Config)) {
 
 func testConfigure() *Config {
 	c := &Config{
-		Addr:     "127.0.0.1",
-		Port:     3000,
-		RedisUrl: "127.0.0.1:6379",
+		Addr:      "127.0.0.1",
+		Port:      3000,
+		RedisUrl:  "127.0.0.1:6379",
+		KeyPrefix: fmt.Sprintf("%d:", os.Getpid()),
 	}
 
 	for _, cb := range callbacks {

@@ -15,7 +15,8 @@ const (
 )
 
 var (
-	pool *redis.Pool
+	pool      *redis.Pool
+	keyPrefix string
 )
 
 func init() {
@@ -39,6 +40,8 @@ func configure(cnf *Config) {
 	if _, err := conn.Do("PING"); err != nil {
 		panic(err)
 	}
+
+	keyPrefix = cnf.KeyPrefix
 }
 
 func StreamIn(owner, name string) InStream {
@@ -221,10 +224,10 @@ func (s *stream) getState() (State, error) {
 	return State(state), err
 }
 
-func (s *stream) stateKey() string { return "state:" + s.nwo() }
+func (s *stream) stateKey() string { return keyPrefix + "state:" + s.nwo() }
 
-func (s *stream) dataKey() string { return "data:" + s.nwo() }
+func (s *stream) dataKey() string { return keyPrefix + "data:" + s.nwo() }
 
-func (s *stream) streamKey() string { return s.nwo() }
+func (s *stream) streamKey() string { return keyPrefix + s.nwo() }
 
 func (s *stream) nwo() string { return s.owner + "/" + s.name }
