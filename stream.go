@@ -20,10 +20,10 @@ var (
 )
 
 func init() {
-	ConfigCallback(configure)
+	ConfigCallback(configureStream)
 }
 
-func configure(cnf *Config) {
+func configureStream(cnf *Config) {
 	pool = &redis.Pool{
 		Dial: func() (redis.Conn, error) {
 			return redis.Dial("tcp", cnf.RedisUrl)

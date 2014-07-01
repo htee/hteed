@@ -13,7 +13,9 @@ import (
 )
 
 func init() {
-	testConfigure()
+	ts := httptest.NewServer(http.HandlerFunc(fakeWebHandler))
+
+	testConfigure(ts.URL)
 }
 
 func TestHelloWorldRoundTrip(t *testing.T) {
@@ -258,4 +260,8 @@ func TestEventStreamRequest(t *testing.T) {
 
 		step <- true
 	}
+}
+
+func fakeWebHandler(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(204)
 }

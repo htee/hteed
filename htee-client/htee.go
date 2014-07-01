@@ -13,7 +13,7 @@ import (
 	"github.com/nu7hatch/gouuid"
 )
 
-var endpoint = flag.String("endpoint", "http://127.0.0.1:3000", "URL of the ht service.")
+var endpoint = flag.String("endpoint", "http://127.0.0.1:4000", "URL of the ht service.")
 var username = flag.String("username", currentuser(), "Username of the stream owner.")
 var id = flag.String("id", uid(), "ID of the data stream.")
 var help = flag.Bool("help", false, "Print help and exit")
