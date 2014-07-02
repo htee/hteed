@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"strings"
-
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
 )
@@ -40,9 +38,6 @@ func ServerHandler() http.Handler {
 	s.r.HandleFunc("/{owner}/{name}", playbackSSEStream).
 		Methods("GET").
 		Headers("Accept", "text/event-stream")
-	s.r.HandleFunc("/{owner}/{name}", sendSSEShell).
-		Methods("GET").
-		MatcherFunc(isBrowser)
 	s.r.HandleFunc("/{owner}/{name}", s.recordStream).
 		Methods("POST")
 	s.r.HandleFunc("/{owner}/{name}", s.playbackStream).
@@ -204,11 +199,4 @@ func proxyResponse(w http.ResponseWriter, r *http.Response) error {
 
 	_, err := io.Copy(w, r.Body)
 	return err
-}
-
-func isBrowser(r *http.Request, rm *mux.RouteMatch) bool {
-	hdr := r.Header
-
-	return strings.Contains(hdr.Get("User-Agent"), "WebKit") &&
-		strings.Contains(hdr.Get("Accept"), "text/html")
 }

@@ -58,11 +58,6 @@ func playbackSSEStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func sendSSEShell(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(200)
-	w.Write([]byte(SSEShell))
-}
-
 func formatSSEData(uc <-chan []byte) <-chan string {
 	ec := make(chan string)
 
@@ -88,42 +83,3 @@ func min(a, b int) int {
 		return b
 	}
 }
-
-const SSEShell = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.1/jquery.min.js"></script>
-</head>
-<body><pre><code></code></pre>
-  <script>
-    var source = new EventSource(window.location.pathname);
-    var body = $("html,body");
-    var cursor = $("pre code")[0];
-    var resetLine = false;
-
-    function append(data) {
-      cursor.innerHTML += decodeURIComponent(data);
-    }
-
-    source.onmessage = function(e) {
-      append(e.data);
-    };
-
-    source.onerror = function(e) {
-      console.log(e);
-    };
-
-    source.addEventListener('eof', function(e) {
-      source.close();
-    }, false);
-
-    window.setInterval(function(){
-      window.scrollTo(0, document.body.scrollHeight);
-    }, 100);
-
-  </script>
-</body>
-</html>
-`
