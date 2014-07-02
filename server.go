@@ -177,10 +177,17 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
+	uh := http.Header{}
+	for k, _ := range r.Header {
+		uh.Set(k, r.Header.Get(k))
+	}
+
+	uh.Set("X-Forwarded-Host", r.Host)
+
 	ur := &http.Request{
 		URL:    uu,
+		Header: uh,
 		Method: r.Method,
-		Header: r.Header,
 	}
 
 	return s.t.RoundTrip(ur)
