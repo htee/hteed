@@ -30,7 +30,7 @@ func configureServer(cnf *Config) {
 func ServerHandler() http.Handler {
 	s := &server{
 		r: mux.NewRouter(),
-		c: &http.Client{},
+		t: &http.Transport{},
 		u: upstream,
 	}
 
@@ -55,7 +55,7 @@ func ServerHandler() http.Handler {
 
 type server struct {
 	r *mux.Router
-	c *http.Client
+	t *http.Transport
 
 	u *url.URL
 }
@@ -183,7 +183,7 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 		Header: r.Header,
 	}
 
-	return s.c.Do(ur)
+	return s.t.RoundTrip(ur)
 }
 
 func proxyResponse(w http.ResponseWriter, r *http.Response) error {
