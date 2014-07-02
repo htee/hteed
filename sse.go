@@ -3,10 +3,12 @@ package htee
 import (
 	"fmt"
 	"net/http"
-	"net/url"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
+
+const MaxDataSize = 4096 // 4KB
 
 func playbackSSEStream(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -66,13 +68,25 @@ func formatSSEData(uc <-chan []byte) <-chan string {
 
 	go func() {
 		for buf := range uc {
-			ec <- "data:" + url.QueryEscape(string(buf)) + "\n\n"
+			for i, n := 0, min(MaxDataSize, len(buf)); i < len(buf); i += MaxDataSize {
+				ec <- "data:" + strconv.Quote(string(buf[i:n])) + "\n\n"
+
+				n = min(n+MaxDataSize, len(buf))
+			}
 		}
 
 		close(ec)
 	}()
 
 	return ec
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	} else {
+		return b
+	}
 }
 
 const SSEShell = `
