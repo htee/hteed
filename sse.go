@@ -50,7 +50,7 @@ func playbackSSEStream(w http.ResponseWriter, r *http.Request) {
 				w.Write([]byte(data))
 				w.(http.Flusher).Flush()
 			} else {
-				w.Write([]byte("event:eof\n"))
+				w.Write([]byte("event:eof\ndata:\n\n"))
 				w.(http.Flusher).Flush()
 				return
 			}
