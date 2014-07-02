@@ -10,12 +10,11 @@ import (
 	"os/user"
 
 	"github.com/benburkert/htee"
-	"github.com/nu7hatch/gouuid"
 )
 
 var endpoint = flag.String("endpoint", "http://127.0.0.1:4000", "URL of the ht service.")
 var username = flag.String("username", currentuser(), "Username of the stream owner.")
-var id = flag.String("id", uid(), "ID of the data stream.")
+var id = flag.String("name", "", "Name of the data stream.")
 var help = flag.Bool("help", false, "Print help and exit")
 
 func currentuser() string {
@@ -24,16 +23,6 @@ func currentuser() string {
 	} else {
 		return u.Username
 	}
-}
-
-func uid() string {
-	uid, e := uuid.NewV4()
-
-	if e != nil {
-		panic(e.Error())
-	}
-
-	return uid.String()
 }
 
 func printHelp() {
