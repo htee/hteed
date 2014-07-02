@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
@@ -39,7 +40,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	rc := ioutil.NopCloser(io.TeeReader(io.Reader(os.Stdin), io.Writer(os.Stdout)))
+	buffOut := newBufferedWriter(io.Writer(os.Stdout))
+	rc := ioutil.NopCloser(io.TeeReader(io.Reader(os.Stdin), buffOut))
 
 	client, err := htee.NewClient(*endpoint, *username)
 	if err != nil {
@@ -73,6 +75,8 @@ func main() {
 		}
 	}
 
+	buffOut.Flush()
+
 	res, err = res.NextResponse()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
@@ -84,4 +88,34 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unexpected server response %q\n", res.Status)
 		os.Exit(4)
 	}
+}
+
+func newBufferedWriter(w io.Writer) *bufferedWriter {
+	return &bufferedWriter{
+		w: bufio.NewWriter(w),
+		f: false,
+	}
+}
+
+type bufferedWriter struct {
+	w *bufio.Writer
+	f bool
+}
+
+func (fw *bufferedWriter) Write(p []byte) (nn int, err error) {
+	if nn, err = fw.w.Write(p); err != nil {
+		return
+	}
+
+	if fw.f {
+		err = fw.w.Flush()
+	}
+
+	return
+}
+
+func (fw *bufferedWriter) Flush() error {
+	fw.f = true
+
+	return fw.w.Flush()
 }
