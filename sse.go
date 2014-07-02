@@ -1,9 +1,9 @@
 package htee
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/mux"
 )
@@ -24,8 +24,6 @@ func playbackSSEStream(w http.ResponseWriter, r *http.Request) {
 	hdr.Set("Content-Type", "text/event-stream")
 	hdr.Set("Cache-Control", "no-cache")
 	hdr.Set("Connection", "close")
-
-	defer out.Close()
 
 	for {
 		select {
@@ -64,7 +62,14 @@ func formatSSEData(uc <-chan []byte) <-chan string {
 	go func() {
 		for buf := range uc {
 			for i, n := 0, min(MaxDataSize, len(buf)); i < len(buf); i += MaxDataSize {
-				ec <- "data:" + strconv.Quote(string(buf[i:n])) + "\n\n"
+				data, err := json.Marshal(string(buf[i:n]))
+				if err != nil {
+					ec <- "event:error\ndata:\n\n"
+					close(ec)
+					return
+				}
+
+				ec <- "data:" + string(data) + "\n\n"
 
 				n = min(n+MaxDataSize, len(buf))
 			}
