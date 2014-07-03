@@ -167,7 +167,7 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 }
 
 func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
-	uu, err := s.u.Parse(r.URL.Path)
+	uu, err := s.u.Parse(r.URL.RequestURI())
 	if err != nil {
 		return nil, err
 	}
