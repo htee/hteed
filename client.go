@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func NewClient(endpoint, username string) (*Client, error) {
+func NewClient(endpoint, username, token string) (*Client, error) {
 	url, err := url.ParseRequestURI(endpoint)
 	if err != nil {
 		return nil, err
@@ -17,6 +17,7 @@ func NewClient(endpoint, username string) (*Client, error) {
 		c:        &http.Client{},
 		Endpoint: url,
 		Username: username,
+		token:    token,
 	}, nil
 }
 
@@ -38,6 +39,7 @@ type Client struct {
 
 	Endpoint *url.URL
 	Username string
+	token    string
 }
 
 func (c *Client) GetStream(owner, name string) (*http.Response, error) {
@@ -55,16 +57,17 @@ func (c *Client) PostStream(name string, body io.ReadCloser) (*http.Response, er
 		return nil, err
 	}
 
-	return c.c.Do(buildPost(url, body))
+	return c.c.Do(c.buildPost(url, body))
 }
 
 func buildGet(url *url.URL) *http.Request {
 	return buildRequest("GET", url, defaultHeader(), nil)
 }
 
-func buildPost(url *url.URL, body io.ReadCloser) *http.Request {
+func (c *Client) buildPost(url *url.URL, body io.ReadCloser) *http.Request {
 	hdr := defaultHeader()
 	hdr.Set("Expect", "100-Continue")
+	hdr.Set("Authorization", "Token "+c.token)
 
 	return buildRequest("POST", url, hdr, body)
 }

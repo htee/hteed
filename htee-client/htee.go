@@ -14,7 +14,8 @@ import (
 )
 
 var endpoint = flag.String("endpoint", "http://127.0.0.1:4000", "URL of the ht service.")
-var username = flag.String("username", currentuser(), "Username of the stream owner.")
+var username = flag.String("owner", currentuser(), "Login of the stream owner.")
+var token = flag.String("token", "", "API token for authentication.")
 var id = flag.String("name", "", "Name of the data stream.")
 var help = flag.Bool("help", false, "Print help and exit")
 
@@ -43,7 +44,7 @@ func main() {
 	buffOut := newBufferedWriter(io.Writer(os.Stdout))
 	rc := ioutil.NopCloser(io.TeeReader(io.Reader(os.Stdin), buffOut))
 
-	client, err := htee.NewClient(*endpoint, *username)
+	client, err := htee.NewClient(*endpoint, *username, *token)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 
