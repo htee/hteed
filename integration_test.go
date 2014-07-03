@@ -3,12 +3,12 @@
 package htee
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 )
 
@@ -253,7 +253,12 @@ func TestEventStreamRequest(t *testing.T) {
 			}
 			break
 		} else {
-			if dc := fmt.Sprintf("data:%s\n\n", url.QueryEscape(chunk)); string(buf[:n]) != dc {
+			data, err := json.Marshal(chunk)
+			if err != nil {
+				t.Error(err)
+			}
+
+			if dc := fmt.Sprintf("data:%s\n\n", data); string(buf[:n]) != dc {
 				t.Errorf("response part is %q, want %q", buf[:n], dc)
 			}
 		}
