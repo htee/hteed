@@ -169,7 +169,17 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 }
 
 func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
+	var body io.ReadCloser
 	uu, err := s.u.Parse(r.URL.RequestURI())
+	if err != nil {
+		return nil, err
+	}
+
+	if len(r.TransferEncoding) == 0 || r.TransferEncoding[0] != "chunked" {
+		body = r.Body
+	}
+
+	ur, err := http.NewRequest(r.Method, uu.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -182,11 +192,7 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 	uh.Set("X-Forwarded-Host", r.Host)
 	uh.Set("X-Htee-Authorization", "Token "+authToken)
 
-	ur := &http.Request{
-		URL:    uu,
-		Header: uh,
-		Method: r.Method,
-	}
+	ur.Header = uh
 
 	return s.t.RoundTrip(ur)
 }
