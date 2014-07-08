@@ -23,10 +23,10 @@ func init() {
 	ConfigCallback(configureStream)
 }
 
-func configureStream(cnf *Config) {
+func configureStream(cnf *ServerConfig) error {
 	pool = &redis.Pool{
 		Dial: func() (redis.Conn, error) {
-			return redis.Dial("tcp", cnf.RedisUrl)
+			return redis.Dial("tcp", cnf.RedisURL)
 		},
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {
 			_, err := c.Do("PING")
@@ -38,10 +38,12 @@ func configureStream(cnf *Config) {
 	defer conn.Close()
 
 	if _, err := conn.Do("PING"); err != nil {
-		panic(err)
+		return err
 	}
 
 	keyPrefix = cnf.KeyPrefix
+
+	return nil
 }
 
 func StreamIn(owner, name string) InStream {
@@ -231,16 +233,3 @@ func (s *stream) dataKey() string { return keyPrefix + "data:" + s.nwo() }
 func (s *stream) streamKey() string { return keyPrefix + s.nwo() }
 
 func (s *stream) nwo() string { return s.owner + "/" + s.name }
-
-func delTestData() {
-	conn := pool.Get()
-
-	keys, err := redis.Strings(conn.Do("KEYS", keyPrefix+"*"))
-	if err != nil {
-		panic(err)
-	}
-
-	for _, key := range keys {
-		conn.Do("DEL", key)
-	}
-}

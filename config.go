@@ -1,76 +1,124 @@
 package htee
 
 import (
-	"flag"
 	"fmt"
 	"os"
+	"os/user"
+	"reflect"
+	"strconv"
+	"strings"
+
+	"github.com/BurntSushi/toml"
 )
 
 var (
-	callbacks = make([]func(*Config), 0)
+	callbacks = make([]func(*ServerConfig) error, 0)
 )
 
-type Config struct {
-	Addr      string
-	Port      int
-	RedisUrl  string
-	KeyPrefix string
-	WebUrl    string
-}
-
-func Configure() *Config {
-	c := new(Config)
-
-	addr := flag.String("address", "0.0.0.0", "Bind to host address (default is 0.0.0.0)")
-	port := flag.String("port", "4000", "Bind to host port (default is 3000)")
-
-	flag.StringVar(&c.RedisUrl, "redis-url", "", "Redis server URL (default is REDIS_URL)")
-	flag.StringVar(&c.WebUrl, "web-url", "http://0.0.0.0:3000/", "Upstream htee-web url (default is http://0.0.0.0:3000/)")
-
-	help := flag.Bool("help", false, "Print help and exit")
-
-	flag.Parse()
-
-	if *help {
-		fmt.Println("htsd - ht.io server")
-		flag.PrintDefaults()
-
-		os.Exit(0)
-	}
-
-	c.Addr = *addr + ":" + *port
-
-	if c.RedisUrl == "" {
-		c.RedisUrl = os.Getenv("REDIS_URL")
-	}
-
-	if c.RedisUrl == "" {
-		c.RedisUrl = ":6379"
-	}
-
-	for _, cb := range callbacks {
-		cb(c)
-	}
-
-	return c
-}
-
-func ConfigCallback(cb func(*Config)) {
+func ConfigCallback(cb func(*ServerConfig) error) {
 	callbacks = append(callbacks, cb)
 }
 
-func testConfigure(webUrl string) *Config {
-	c := &Config{
-		Addr:      "127.0.0.1",
-		Port:      3000,
-		RedisUrl:  "127.0.0.1:6379",
-		KeyPrefix: fmt.Sprintf("%d:", os.Getpid()),
-		WebUrl:    webUrl,
-	}
-
+func Configure(c *ServerConfig) error {
 	for _, cb := range callbacks {
-		cb(c)
+		if err := cb(c); err != nil {
+			return err
+		}
 	}
 
-	return c
+	return nil
+}
+
+type Config struct {
+	ConfigFile string
+
+	Client *ClientConfig
+	Server *ServerConfig
+}
+
+type ClientConfig struct {
+	Name string
+
+	Endpoint string `toml:"endpoint" env:"HTEE_ENDPOINT"`
+	Login    string `toml:"login" env:"HTEE_LOGIN"`
+	Token    string `toml:"token" env:"HTEE_TOKEN"`
+}
+
+type ServerConfig struct {
+	KeyPrefix string
+
+	Address  string `toml:"address" env:"HTEE_ADDRESS"`
+	Port     int    `toml:"port" env"HTEE_PORT"`
+	RedisURL string `toml:"redis-url" env:"REDIS_URL"`
+	WebURL   string `toml:"web-url" env:"HTEE_WEB_URL"`
+}
+
+func (c *ServerConfig) Addr() string {
+	return c.Address + ":" + strconv.Itoa(c.Port)
+}
+
+func (c *Config) Load() error {
+	if err := c.loadConfigFile(); err != nil {
+		return err
+	}
+
+	if err := c.loadEnv(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Config) loadConfigFile() error {
+	if c.ConfigFile[:2] == "~/" {
+
+		usr, err := user.Current()
+		if err != nil {
+			return err
+		}
+
+		c.ConfigFile = strings.Replace(c.ConfigFile, "~", usr.HomeDir, 1)
+	}
+
+	if _, err := os.Stat(c.ConfigFile); os.IsNotExist(err) {
+		return nil
+	}
+
+	_, err := toml.DecodeFile(c.ConfigFile, &c)
+	return err
+}
+
+func (c *Config) loadEnv() error {
+	value := reflect.Indirect(reflect.ValueOf(c))
+	typ := value.Type()
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+
+		// Retrieve environment variable.
+		v := strings.TrimSpace(os.Getenv(field.Tag.Get("env")))
+		if v == "" {
+			continue
+		}
+
+		// Set the appropriate type.
+		switch field.Type.Kind() {
+		case reflect.Bool:
+			value.Field(i).SetBool(v != "0" && v != "false")
+		case reflect.Int:
+			newValue, err := strconv.ParseInt(v, 10, 0)
+			if err != nil {
+				return fmt.Errorf("Parse error: %s: %s", field.Tag.Get("env"), err)
+			}
+			value.Field(i).SetInt(newValue)
+		case reflect.String:
+			value.Field(i).SetString(v)
+		case reflect.Float64:
+			newValue, err := strconv.ParseFloat(v, 64)
+			if err != nil {
+				return fmt.Errorf("Parse error: %s: %s", field.Tag.Get("env"), err)
+			}
+			value.Field(i).SetFloat(newValue)
+		}
+	}
+	return nil
 }

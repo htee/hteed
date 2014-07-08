@@ -18,11 +18,10 @@ func init() {
 	ConfigCallback(configureServer)
 }
 
-func configureServer(cnf *Config) {
+func configureServer(cnf *ServerConfig) error {
 	var err error
-	if upstream, err = url.Parse(cnf.WebUrl); err != nil {
-		panic(err)
-	}
+	upstream, err = url.Parse(cnf.WebURL)
+	return err
 }
 
 func ServerHandler() http.Handler {

@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-func NewClient(endpoint, username, token string) (*Client, error) {
-	url, err := url.ParseRequestURI(endpoint)
+func NewClient(cnf *ClientConfig) (*Client, error) {
+	url, err := url.ParseRequestURI(cnf.Endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -16,29 +16,16 @@ func NewClient(endpoint, username, token string) (*Client, error) {
 	return &Client{
 		c:        &http.Client{},
 		Endpoint: url,
-		Username: username,
-		token:    token,
+		Login:    cnf.Login,
+		token:    cnf.Token,
 	}, nil
-}
-
-func testClient(endpoint string) *Client {
-	url, err := url.ParseRequestURI(endpoint)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return &Client{
-		c:        &http.Client{},
-		Endpoint: url,
-		Username: "test",
-	}
 }
 
 type Client struct {
 	c *http.Client
 
 	Endpoint *url.URL
-	Username string
+	Login    string
 	token    string
 }
 
@@ -52,7 +39,7 @@ func (c *Client) GetStream(owner, name string) (*http.Response, error) {
 }
 
 func (c *Client) PostStream(name string, body io.ReadCloser) (*http.Response, error) {
-	url, err := c.Endpoint.Parse(buildNWO(c.Username, name))
+	url, err := c.Endpoint.Parse(buildNWO(c.Login, name))
 	if err != nil {
 		return nil, err
 	}

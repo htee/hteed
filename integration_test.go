@@ -9,13 +9,41 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 func init() {
-	ts := httptest.NewServer(http.HandlerFunc(fakeWebHandler))
+	us := httptest.NewServer(http.HandlerFunc(fakeWebHandler))
 
-	testConfigure(ts.URL)
+	sc := &ServerConfig{
+		Address:   "127.0.0.1",
+		Port:      4000,
+		RedisURL:  ":6379",
+		WebURL:    us.URL,
+		KeyPrefix: fmt.Sprintf("%d:", os.Getpid()),
+	}
+
+	Configure(sc)
+}
+
+func testClient(url string) (*Client, error) {
+	return NewClient(&ClientConfig{Endpoint: url, Login: "test"})
+}
+
+func delTestData() {
+	conn := pool.Get()
+
+	keys, err := redis.Strings(conn.Do("KEYS", keyPrefix+"*"))
+	if err != nil {
+		panic(err)
+	}
+
+	for _, key := range keys {
+		conn.Do("DEL", key)
+	}
 }
 
 func TestHelloWorldRoundTrip(t *testing.T) {
@@ -24,7 +52,11 @@ func TestHelloWorldRoundTrip(t *testing.T) {
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
-	client := testClient(ts.URL)
+	client, err := testClient(ts.URL)
+	if err != nil {
+		t.Error(err)
+	}
+
 	pr, pw := io.Pipe()
 
 	go func() {
@@ -36,7 +68,7 @@ func TestHelloWorldRoundTrip(t *testing.T) {
 		t.Error(err)
 	}
 
-	res, err := client.GetStream(client.Username, "helloworld")
+	res, err := client.GetStream(client.Login, "helloworld")
 	if err != nil {
 		t.Error(err)
 	}
@@ -58,7 +90,11 @@ func TestStreamingLockstep(t *testing.T) {
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
-	client := testClient(ts.URL)
+	client, err := testClient(ts.URL)
+	if err != nil {
+		t.Error(err)
+	}
+
 	pr, pw := io.Pipe()
 	step, parts := make(chan interface{}), 100
 
@@ -74,7 +110,7 @@ func TestStreamingLockstep(t *testing.T) {
 		t.Error(err)
 	}
 
-	res, err := client.GetStream(client.Username, "lockstep")
+	res, err := client.GetStream(client.Login, "lockstep")
 	if err != nil {
 		t.Error(err)
 	}
@@ -100,7 +136,11 @@ func TestStreamingFanOut(t *testing.T) {
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
-	client := testClient(ts.URL)
+	client, err := testClient(ts.URL)
+	if err != nil {
+		t.Error(err)
+	}
+
 	pr, pw := io.Pipe()
 	step, parts, peers := make(chan interface{}), 1000, 100
 
@@ -118,7 +158,7 @@ func TestStreamingFanOut(t *testing.T) {
 
 	responses := make([](*http.Response), peers)
 	for i := range responses {
-		if res, err := client.GetStream(client.Username, "fanout"); err != nil {
+		if res, err := client.GetStream(client.Login, "fanout"); err != nil {
 			t.Error(err)
 		} else {
 			responses[i] = res
@@ -155,7 +195,11 @@ func TestStreamingFanIn(t *testing.T) {
 	readers := make([](*io.PipeReader), peers)
 
 	for i := range writers {
-		client := testClient(ts.URL)
+		client, err := testClient(ts.URL)
+		if err != nil {
+			t.Error(err)
+		}
+
 		pr, pw := io.Pipe()
 
 		clients[i] = client
@@ -184,9 +228,12 @@ func TestStreamingFanIn(t *testing.T) {
 		}
 	}()
 
-	client := testClient(ts.URL)
+	client, err := testClient(ts.URL)
+	if err != nil {
+		t.Error(err)
+	}
 
-	res, err := client.GetStream(client.Username, "fanin")
+	res, err := client.GetStream(client.Login, "fanin")
 	if err != nil {
 		t.Error(err)
 	}
@@ -215,7 +262,12 @@ func TestEventStreamRequest(t *testing.T) {
 	ts := httptest.NewServer(ServerHandler())
 	defer ts.Close()
 
-	client, name := testClient(ts.URL), "sse"
+	client, err := testClient(ts.URL)
+	if err != nil {
+		t.Error(err)
+	}
+
+	name := "sse"
 	pr, pw := io.Pipe()
 	chunks := []string{"Testing", " a ", "multi-chunk", " stream"}
 	step := make(chan interface{})
