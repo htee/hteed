@@ -11,7 +11,8 @@ import (
 )
 
 var (
-	upstream *url.URL
+	upstream  *url.URL
+	authToken string
 )
 
 func init() {
@@ -19,6 +20,8 @@ func init() {
 }
 
 func configureServer(cnf *ServerConfig) error {
+	authToken = cnf.WebToken
+
 	var err error
 	upstream, err = url.Parse(cnf.WebURL)
 	return err
@@ -177,6 +180,7 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 	}
 
 	uh.Set("X-Forwarded-Host", r.Host)
+	uh.Set("X-Htee-Authorization", "Token "+authToken)
 
 	ur := &http.Request{
 		URL:    uu,

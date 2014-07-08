@@ -51,6 +51,7 @@ type ServerConfig struct {
 	Port     int    `toml:"port" env"HTEE_PORT"`
 	RedisURL string `toml:"redis-url" env:"REDIS_URL"`
 	WebURL   string `toml:"web-url" env:"HTEE_WEB_URL"`
+	WebToken string `toml:"web-token" env:"HTEE_WEB_TOKEN"`
 }
 
 func (c *ServerConfig) Addr() string {
