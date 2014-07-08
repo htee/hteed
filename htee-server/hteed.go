@@ -34,9 +34,9 @@ func main() {
 	fs := flag.NewFlagSet("hteed", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
 	fs.StringVar(&configFile, "c", "", "")
-	fs.StringVar(&configFile, "-config", "/etc/hteed/hteed.conf", "")
+	fs.StringVar(&configFile, "config", "/etc/hteed/hteed.conf", "")
 	fs.BoolVar(&showHelp, "h", false, "")
-	fs.BoolVar(&showHelp, "-help", false, "")
+	fs.BoolVar(&showHelp, "help", false, "")
 
 	fs.Parse(os.Args[1:])
 
@@ -68,7 +68,7 @@ func loadConfig(configFile string) *htee.ServerConfig {
 	}
 
 	if err := gconfig.Load(); err != nil {
-		fmt.Printf("%s\n", usage)
+		fmt.Printf("%s\n\n", usage)
 		fmt.Printf("%s\n", err.Error())
 		os.Exit(1)
 	}
@@ -88,8 +88,12 @@ func loadConfig(configFile string) *htee.ServerConfig {
 	fs.StringVar(&config.WebURL, "w", config.WebURL, "")
 	fs.StringVar(&config.WebURL, "web-url", config.WebURL, "")
 
+	var __ string
+	fs.StringVar(&__, "c", "", "")
+	fs.StringVar(&__, "config", "", "")
+
 	if err := fs.Parse(os.Args[1:]); err != nil {
-		fmt.Printf("%s\n", usage)
+		fmt.Printf("%s\n\n", usage)
 		fmt.Printf("%s\n", err.Error())
 		os.Exit(1)
 	}

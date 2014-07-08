@@ -26,24 +26,29 @@ Options:
     -e, --endpoint URL      htee URL
     -l, --login NAME        Login name
     -t, --token TOKEN       API authentication token
-    -n, --name NAME         Stream name
     -h, --help              Show help
 `)
 
 func main() {
 	var configFile, streamName string
 	var showHelp bool
+	var arguments []string
 
 	fs := flag.NewFlagSet("htee", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
 	fs.StringVar(&configFile, "c", "", "")
-	fs.StringVar(&configFile, "-config", "~/.htee", "")
+	fs.StringVar(&configFile, "config", "~/.htee", "")
 	fs.BoolVar(&showHelp, "h", false, "")
-	fs.BoolVar(&showHelp, "-help", false, "")
-	fs.StringVar(&streamName, "n", "", "")
-	fs.StringVar(&streamName, "-name", "", "")
+	fs.BoolVar(&showHelp, "help", false, "")
 
-	fs.Parse(os.Args[1:])
+	if len(os.Args) > 1 && os.Args[1][0] != '-' {
+		streamName = os.Args[1]
+		arguments = os.Args[2:]
+	} else {
+		arguments = os.Args[1:]
+	}
+
+	fs.Parse(arguments)
 
 	if showHelp {
 		fmt.Printf("%s\n", usage)
@@ -112,24 +117,29 @@ func loadConfig(configFile string) *htee.ClientConfig {
 	}
 
 	if err := gconfig.Load(); err != nil {
-		fmt.Printf("%s\n", usage)
+		fmt.Printf("%s\n\n", usage)
 		fmt.Printf("%s\n", err.Error())
 		os.Exit(1)
 	}
 
 	fs := flag.NewFlagSet("htee", flag.ContinueOnError)
+	fs.SetOutput(ioutil.Discard)
 
 	fs.StringVar(&config.Endpoint, "e", config.Endpoint, "")
-	fs.StringVar(&config.Endpoint, "-endpoint", config.Endpoint, "")
+	fs.StringVar(&config.Endpoint, "endpoint", config.Endpoint, "")
 
 	fs.StringVar(&config.Token, "t", config.Token, "")
-	fs.StringVar(&config.Token, "-token", config.Token, "")
+	fs.StringVar(&config.Token, "token", config.Token, "")
 
 	fs.StringVar(&config.Login, "l", config.Login, "")
-	fs.StringVar(&config.Login, "-login", config.Login, "")
+	fs.StringVar(&config.Login, "login", config.Login, "")
+
+	var __ string
+	fs.StringVar(&__, "c", "", "")
+	fs.StringVar(&__, "config", "", "")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
-		fmt.Printf("%s\n", usage)
+		fmt.Printf("%s\n\n", usage)
 		fmt.Printf("%s\n", err.Error())
 		os.Exit(1)
 	}
