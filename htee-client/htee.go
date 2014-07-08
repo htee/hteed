@@ -149,30 +149,44 @@ func loadConfig(configFile string) *htee.ClientConfig {
 
 func newBufferedWriter(w io.Writer) *bufferedWriter {
 	return &bufferedWriter{
-		w: bufio.NewWriter(w),
-		f: false,
+		writer: bufio.NewWriter(w),
+		flush:  false,
+		buffer: [][]byte{},
 	}
 }
 
 type bufferedWriter struct {
-	w *bufio.Writer
-	f bool
+	writer *bufio.Writer
+	flush  bool
+	buffer [][]byte
 }
 
 func (fw *bufferedWriter) Write(p []byte) (nn int, err error) {
-	if nn, err = fw.w.Write(p); err != nil {
-		return
-	}
+	var n int
 
-	if fw.f {
-		err = fw.w.Flush()
+	if fw.flush {
+		for n, nn = 0, 0; nn < len(p); nn += n {
+			if n, err = fw.writer.Write(p); err != nil {
+				return
+			}
+		}
+	} else {
+		fw.buffer = append(fw.buffer, p)
 	}
 
 	return
 }
 
-func (fw *bufferedWriter) Flush() error {
-	fw.f = true
+func (fw *bufferedWriter) Flush() (err error) {
+	fw.flush = true
 
-	return fw.w.Flush()
+	for _, p := range fw.buffer {
+		for n, nn := 0, 0; nn < len(p); nn += n {
+			if n, err = fw.writer.Write(p); err != nil {
+				return
+			}
+		}
+	}
+
+	return fw.writer.Flush()
 }
