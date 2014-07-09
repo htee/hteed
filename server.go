@@ -1,10 +1,13 @@
 package htee
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
@@ -140,11 +143,44 @@ func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ur, err := s.proxyUpstream(r)
+
 	if err != nil {
 		fmt.Println(err.Error())
 		w.WriteHeader(500)
 
 		return
+	} else if ur.StatusCode == 202 {
+		if strings.Contains(ur.Header.Get("Content-Type"), "application/json") {
+			var message struct {
+				Method, Path, Body string
+				Headers            map[string]string
+			}
+
+			dec := json.NewDecoder(ur.Body)
+			if err = dec.Decode(&message); err != nil {
+				fmt.Println(err.Error())
+				w.WriteHeader(500)
+			}
+
+			if message.Body != "" {
+				r.Method = message.Method
+			}
+
+			if message.Path != "" {
+				if r.URL, err = r.URL.Parse(message.Path); err != nil {
+					fmt.Println(err.Error())
+					w.WriteHeader(500)
+				}
+			}
+
+			for k, v := range message.Headers {
+				r.Header.Set(k, v)
+			}
+
+			if message.Body != "" {
+				r.Body = ioutil.NopCloser(strings.NewReader(message.Body))
+			}
+		}
 	} else if ur.StatusCode != 204 {
 		if err = proxyResponse(w, ur); err != nil {
 			fmt.Println(err.Error())
@@ -152,17 +188,6 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 		}
 
 		return
-	} else if ur.Header.Get("Location") != "" {
-		loc, err := url.Parse(ur.Header.Get("Location"))
-		if err != nil {
-			fmt.Println(err.Error())
-			w.WriteHeader(500)
-		}
-
-		if r.URL, err = r.URL.Parse(loc.Path); err != nil {
-			fmt.Println(err.Error())
-			w.WriteHeader(500)
-		}
 	}
 
 	next(w, r)
@@ -177,6 +202,7 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 
 	if len(r.TransferEncoding) == 0 || r.TransferEncoding[0] != "chunked" {
 		body = r.Body
+		r.Body = ioutil.NopCloser(strings.NewReader(""))
 	}
 
 	ur, err := http.NewRequest(r.Method, uu.String(), body)
