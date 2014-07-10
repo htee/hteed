@@ -45,6 +45,8 @@ func ServerHandler() http.Handler {
 		Headers("Accept", "text/event-stream")
 	s.r.HandleFunc("/{owner}/{name}", s.recordStream).
 		Methods("POST")
+	s.r.HandleFunc("/{owner}/{name}", s.deleteStream).
+		Methods("DELETE")
 	s.r.HandleFunc("/{owner}/{name}", s.playbackStream).
 		Methods("GET").Name("stream")
 
@@ -100,6 +102,20 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 				inc <- buf[:n]
 			}
 		}
+	}
+}
+
+func (s *server) deleteStream(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	owner := vars["owner"]
+	name := vars["name"]
+
+	if err := StreamDelete(owner, name); err != nil {
+		fmt.Println(err.Error())
+		w.WriteHeader(500)
+	} else {
+		w.WriteHeader(204)
+		w.(http.Flusher).Flush()
 	}
 }
 

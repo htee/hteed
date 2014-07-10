@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/garyburd/redigo/redis"
@@ -316,6 +317,62 @@ func TestEventStreamRequest(t *testing.T) {
 		}
 
 		step <- true
+	}
+}
+
+func TestDeleteStreamRequest(t *testing.T) {
+	ts := httptest.NewServer(ServerHandler())
+
+	client, err := testClient(ts.URL)
+	if err != nil {
+		t.Error(err)
+	}
+
+	body := ioutil.NopCloser(strings.NewReader("Goodbye World!"))
+	res, err := client.PostStream("delete-me", body)
+	if err != nil {
+		t.Error(err)
+	} else if res.StatusCode != 100 {
+		t.Errorf("response was a %d status, want 100", res.StatusCode)
+	}
+
+	loc := res.Header.Get("Location")
+	parts := strings.Split(loc[1:], "/")
+	owner, name := parts[0], parts[1]
+
+	res, err = client.GetStream(owner, name)
+	res.Body.Close()
+	if err != nil {
+		t.Error(err)
+	} else if res.StatusCode != 200 {
+		t.Errorf("response was a %d status, want 200", res.StatusCode)
+	}
+
+	res, err = client.DeleteStream(owner, name)
+	res.Body.Close()
+	if err != nil {
+		t.Error(err)
+	} else if res.StatusCode != 204 {
+		t.Errorf("response was a %d status, want 204", res.StatusCode)
+	}
+
+	res, err = client.GetStream(owner, name)
+	if err != nil {
+		t.Error(err)
+	} else if res.StatusCode != 200 {
+		t.Errorf("response was a %d status, want 200", res.StatusCode)
+	}
+
+	fmt.Println("About to readall")
+	rb, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println("just did readall")
+
+	if string(rb) != "" {
+		t.Errorf("response body is '%s', want ''", rb)
 	}
 }
 

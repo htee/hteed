@@ -63,6 +63,10 @@ func StreamOut(owner, name string) OutStream {
 	return s
 }
 
+func StreamDelete(owner, name string) error {
+	return newStream(owner, name).delete()
+}
+
 func newStream(owner, name string) *stream {
 	return &stream{
 		owner:  owner,
@@ -170,6 +174,14 @@ func (s *stream) streamOut() {
 			s.streamChannel()
 		}
 	}
+}
+
+func (s *stream) delete() error {
+	s.conn.Send("MULTI")
+	s.conn.Send("DEL", s.stateKey(), s.dataKey())
+	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
+	_, err := s.conn.Do("EXEC")
+	return err
 }
 
 func (s *stream) append(buf []byte) {
