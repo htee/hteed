@@ -2,11 +2,12 @@ package htee
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/codegangsta/negroni"
@@ -32,34 +33,35 @@ func configureServer(cnf *ServerConfig) error {
 
 func ServerHandler() http.Handler {
 	s := &server{
-		r: mux.NewRouter(),
-		t: &http.Transport{},
-		u: upstream,
+		router:    mux.NewRouter(),
+		transport: &http.Transport{},
+		upstream:  upstream,
+		logger:    log.New(os.Stdout, "[server]", log.LstdFlags),
 	}
 
 	n := negroni.New()
 	n.Use(negroni.HandlerFunc(s.upstreamMiddleware))
 
-	s.r.HandleFunc("/{owner}/{name}", playbackSSEStream).
+	s.router.HandleFunc("/{owner}/{name}", playbackSSEStream).
 		Methods("GET").
 		Headers("Accept", "text/event-stream")
-	s.r.HandleFunc("/{owner}/{name}", s.recordStream).
+	s.router.HandleFunc("/{owner}/{name}", s.recordStream).
 		Methods("POST")
-	s.r.HandleFunc("/{owner}/{name}", s.deleteStream).
+	s.router.HandleFunc("/{owner}/{name}", s.deleteStream).
 		Methods("DELETE")
-	s.r.HandleFunc("/{owner}/{name}", s.playbackStream).
+	s.router.HandleFunc("/{owner}/{name}", s.playbackStream).
 		Methods("GET").Name("stream")
 
-	n.UseHandler(s.r)
+	n.UseHandler(s.router)
 
 	return n
 }
 
 type server struct {
-	r *mux.Router
-	t *http.Transport
-
-	u *url.URL
+	logger    *log.Logger
+	router    *mux.Router
+	transport *http.Transport
+	upstream  *url.URL
 }
 
 func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
@@ -79,8 +81,7 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case err := <-in.Errors():
-			fmt.Println(err.Error())
-			w.WriteHeader(500)
+			s.handleError(w, r, err)
 
 			return
 		default:
@@ -94,8 +95,7 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 
 				return
 			} else if err != nil {
-				fmt.Println(err.Error())
-				w.WriteHeader(500)
+				s.handleError(w, r, err)
 
 				return
 			} else {
@@ -111,8 +111,7 @@ func (s *server) deleteStream(w http.ResponseWriter, r *http.Request) {
 	name := vars["name"]
 
 	if err := StreamDelete(owner, name); err != nil {
-		fmt.Println(err.Error())
-		w.WriteHeader(500)
+		s.handleError(w, r, err)
 	} else {
 		w.WriteHeader(204)
 		w.(http.Flusher).Flush()
@@ -124,30 +123,20 @@ func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 	owner := vars["owner"]
 	name := vars["name"]
 
-	responseStarted := false
 	out := StreamOut(owner, name)
 	cc := w.(http.CloseNotifier).CloseNotify()
+
+	w.WriteHeader(200)
 
 	for {
 		select {
 		case err := <-out.Errors():
-			fmt.Println(err.Error())
-
-			if !responseStarted {
-				w.WriteHeader(500)
-			}
-
+			s.handleError(w, r, err)
 			return
 		case <-cc:
 			return
 		case data, ok := <-out.Out():
 			if ok {
-
-				if !responseStarted {
-					w.WriteHeader(200)
-					responseStarted = true
-				}
-
 				w.Write(data)
 				w.(http.Flusher).Flush()
 			} else {
@@ -157,13 +146,16 @@ func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *server) handleError(w http.ResponseWriter, r *http.Request, err error) {
+	s.logger.Printf("%s - ERROR: %s", r.RemoteAddr, err.Error())
+	w.WriteHeader(500)
+}
+
 func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ur, err := s.proxyUpstream(r)
 
 	if err != nil {
-		fmt.Println(err.Error())
-		w.WriteHeader(500)
-
+		s.handleError(w, r, err)
 		return
 	} else if ur.StatusCode == 202 {
 		if strings.Contains(ur.Header.Get("Content-Type"), "application/json") {
@@ -174,8 +166,8 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 
 			dec := json.NewDecoder(ur.Body)
 			if err = dec.Decode(&message); err != nil {
-				fmt.Println(err.Error())
-				w.WriteHeader(500)
+				s.handleError(w, r, err)
+				return
 			}
 
 			if message.Body != "" {
@@ -184,8 +176,8 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 
 			if message.Path != "" {
 				if r.URL, err = r.URL.Parse(message.Path); err != nil {
-					fmt.Println(err.Error())
-					w.WriteHeader(500)
+					s.handleError(w, r, err)
+					return
 				}
 			}
 
@@ -199,8 +191,8 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 		}
 	} else if ur.StatusCode != 204 {
 		if err = proxyResponse(w, ur); err != nil {
-			fmt.Println(err.Error())
-			w.WriteHeader(500)
+			s.handleError(w, r, err)
+			return
 		}
 
 		return
@@ -211,7 +203,7 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 
 func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 	var body io.ReadCloser
-	uu, err := s.u.Parse(r.URL.RequestURI())
+	uu, err := s.upstream.Parse(r.URL.RequestURI())
 	if err != nil {
 		return nil, err
 	}
@@ -236,7 +228,7 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 
 	ur.Header = uh
 
-	return s.t.RoundTrip(ur)
+	return s.transport.RoundTrip(ur)
 }
 
 func proxyResponse(w http.ResponseWriter, r *http.Response) error {
