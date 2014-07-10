@@ -17,20 +17,19 @@ var usage = strings.TrimSpace(`
 htee
 
 Usage:
-    htee [<name>]
-    htee [<name>] [--token=<token>]
+    htee
+    htee [--token=<token>]
     htee -h | --help
 
 Options:
     -c, --config FILE       Configuration file
     -e, --endpoint URL      htee URL
-    -l, --login NAME        Login name
     -t, --token TOKEN       API authentication token
     -h, --help              Show help
 `)
 
 func main() {
-	var configFile, streamName string
+	var configFile string
 	var showHelp bool
 	var arguments []string
 
@@ -40,13 +39,6 @@ func main() {
 	fs.StringVar(&configFile, "config", "~/.htee", "")
 	fs.BoolVar(&showHelp, "h", false, "")
 	fs.BoolVar(&showHelp, "help", false, "")
-
-	if len(os.Args) > 1 && os.Args[1][0] != '-' {
-		streamName = os.Args[1]
-		arguments = os.Args[2:]
-	} else {
-		arguments = os.Args[1:]
-	}
 
 	fs.Parse(arguments)
 
@@ -66,7 +58,7 @@ func main() {
 	buffOut := newBufferedWriter(io.Writer(os.Stdout))
 	rc := ioutil.NopCloser(io.TeeReader(io.Reader(os.Stdin), buffOut))
 
-	res, err := client.PostStream(streamName, rc)
+	res, err := client.PostStream(rc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, err.Error())
 

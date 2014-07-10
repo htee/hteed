@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
@@ -65,11 +67,17 @@ func TestHelloWorldRoundTrip(t *testing.T) {
 		pw.Close()
 	}()
 
-	if _, err := client.PostStream("helloworld", pr); err != nil {
+	cntRes, err := client.PostStream(pr)
+	if err != nil {
 		t.Error(err)
 	}
 
-	res, err := client.GetStream(client.Login, "helloworld")
+	owner, name := readNWO(cntRes)
+	if owner != client.Login {
+		t.Errorf("stream owner is %s, want %s", owner, client.Login)
+	}
+
+	res, err := client.GetStream(client.Login, name)
 	if err != nil {
 		t.Error(err)
 	}
@@ -107,11 +115,17 @@ func TestStreamingLockstep(t *testing.T) {
 		pw.Close()
 	}()
 
-	if _, err := client.PostStream("lockstep", pr); err != nil {
+	cntRes, err := client.PostStream(pr)
+	if err != nil {
 		t.Error(err)
 	}
 
-	res, err := client.GetStream(client.Login, "lockstep")
+	owner, name := readNWO(cntRes)
+	if owner != client.Login {
+		t.Errorf("stream owner is %s, want %s", owner, client.Login)
+	}
+
+	res, err := client.GetStream(client.Login, name)
 	if err != nil {
 		t.Error(err)
 	}
@@ -153,13 +167,19 @@ func TestStreamingFanOut(t *testing.T) {
 		pw.Close()
 	}()
 
-	if _, err := client.PostStream("fanout", pr); err != nil {
+	cntRes, err := client.PostStream(pr)
+	if err != nil {
 		t.Error(err)
+	}
+
+	owner, name := readNWO(cntRes)
+	if owner != client.Login {
+		t.Errorf("stream owner is %s, want %s", owner, client.Login)
 	}
 
 	responses := make([](*http.Response), peers)
 	for i := range responses {
-		if res, err := client.GetStream(client.Login, "fanout"); err != nil {
+		if res, err := client.GetStream(client.Login, name); err != nil {
 			t.Error(err)
 		} else {
 			responses[i] = res
@@ -183,80 +203,6 @@ func TestStreamingFanOut(t *testing.T) {
 	}
 }
 
-func TestStreamingFanIn(t *testing.T) {
-	defer delTestData()
-
-	ts := httptest.NewServer(ServerHandler())
-	defer ts.Close()
-
-	step, parts, peers := make(chan interface{}), 1000, 100
-
-	clients := make([](*Client), peers)
-	writers := make([](*io.PipeWriter), peers)
-	readers := make([](*io.PipeReader), peers)
-
-	for i := range writers {
-		client, err := testClient(ts.URL)
-		if err != nil {
-			t.Error(err)
-		}
-
-		pr, pw := io.Pipe()
-
-		clients[i] = client
-		writers[i] = pw
-		readers[i] = pr
-	}
-
-	go func() {
-		for i := 1; i <= parts; i++ {
-			for j := 0; j < peers; j++ {
-				writers[j].Write([]byte(fmt.Sprintf("Peer %d Part %d", i, j)))
-				<-step
-			}
-		}
-
-		for i := 0; i < peers; i++ {
-			writers[i].Close()
-		}
-	}()
-
-	go func() {
-		for i, client := range clients {
-			if _, err := client.PostStream("fanin", readers[i]); err != nil {
-				t.Error(err)
-			}
-		}
-	}()
-
-	client, err := testClient(ts.URL)
-	if err != nil {
-		t.Error(err)
-	}
-
-	res, err := client.GetStream(client.Login, "fanin")
-	if err != nil {
-		t.Error(err)
-	}
-
-	buf := make([]byte, 4096)
-	for i := 1; i <= parts; i++ {
-		for j := 0; j < peers; j++ {
-			n, err := res.Body.Read(buf)
-			if err != nil {
-				if err != io.EOF {
-					t.Error(err)
-				}
-			} else if string(buf[:n]) != fmt.Sprintf("Peer %d Part %d", i, j) {
-				t.Errorf("response %d part is '%s', want 'Part %d'", j, buf[:n], i)
-			}
-
-			step <- true
-		}
-	}
-
-}
-
 func TestEventStreamRequest(t *testing.T) {
 	defer delTestData()
 
@@ -268,7 +214,6 @@ func TestEventStreamRequest(t *testing.T) {
 		t.Error(err)
 	}
 
-	name := "sse"
 	pr, pw := io.Pipe()
 	chunks := []string{"Testing", " a ", "multi-chunk", " stream"}
 	step := make(chan interface{})
@@ -282,9 +227,14 @@ func TestEventStreamRequest(t *testing.T) {
 		pw.Close()
 	}()
 
-	cntRes, err := client.PostStream(name, pr)
+	cntRes, err := client.PostStream(pr)
 	if err != nil {
 		t.Error(err)
+	}
+
+	owner, _ := readNWO(cntRes)
+	if owner != client.Login {
+		t.Errorf("stream owner is %s, want %s", owner, client.Login)
 	}
 
 	req, err := http.NewRequest("GET", ts.URL+cntRes.Header.Get("Location"), nil)
@@ -329,18 +279,18 @@ func TestDeleteStreamRequest(t *testing.T) {
 	}
 
 	body := ioutil.NopCloser(strings.NewReader("Goodbye World!"))
-	res, err := client.PostStream("delete-me", body)
+
+	cntRes, err := client.PostStream(body)
 	if err != nil {
 		t.Error(err)
-	} else if res.StatusCode != 100 {
-		t.Errorf("response was a %d status, want 100", res.StatusCode)
 	}
 
-	loc := res.Header.Get("Location")
-	parts := strings.Split(loc[1:], "/")
-	owner, name := parts[0], parts[1]
+	owner, name := readNWO(cntRes)
+	if owner != client.Login {
+		t.Errorf("stream owner is %s, want %s", owner, client.Login)
+	}
 
-	res, err = client.GetStream(owner, name)
+	res, err := client.GetStream(owner, name)
 	res.Body.Close()
 	if err != nil {
 		t.Error(err)
@@ -363,19 +313,40 @@ func TestDeleteStreamRequest(t *testing.T) {
 		t.Errorf("response was a %d status, want 200", res.StatusCode)
 	}
 
-	fmt.Println("About to readall")
 	rb, err := ioutil.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println("just did readall")
 
 	if string(rb) != "" {
 		t.Errorf("response body is '%s', want ''", rb)
 	}
 }
 
-func fakeWebHandler(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(204)
+func fakeWebHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET", "DELETE":
+		w.WriteHeader(204)
+	case "POST":
+		owner := "test"
+		name := strconv.Itoa(time.Now().Nanosecond())
+
+		message := struct{ Path string }{Path: owner + "/" + name}
+		body, err := json.Marshal(message)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(202)
+		w.Write(body)
+	}
+}
+
+func readNWO(res *http.Response) (owner, name string) {
+	loc := res.Header.Get("Location")
+	parts := strings.Split(loc[1:], "/")
+	owner, name = parts[0], parts[1]
+	return
 }

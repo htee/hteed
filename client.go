@@ -47,13 +47,8 @@ func (c *Client) DeleteStream(owner, name string) (*http.Response, error) {
 	return c.c.Do(buildDelete(url))
 }
 
-func (c *Client) PostStream(name string, body io.ReadCloser) (*http.Response, error) {
-	url, err := c.Endpoint.Parse(buildNWO(c.Login, name))
-	if err != nil {
-		return nil, err
-	}
-
-	return c.c.Do(c.buildPost(url, body))
+func (c *Client) PostStream(body io.ReadCloser) (*http.Response, error) {
+	return c.c.Do(c.buildPost(c.Endpoint, body))
 }
 
 func buildGet(url *url.URL) *http.Request {
