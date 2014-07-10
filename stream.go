@@ -10,8 +10,8 @@ import (
 type State byte
 
 const (
-	Opened State = iota
-	Closed
+	Closed State = iota
+	Opened
 )
 
 var (
