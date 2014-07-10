@@ -42,9 +42,6 @@ func ServerHandler() http.Handler {
 	n := negroni.New()
 	n.Use(negroni.HandlerFunc(s.upstreamMiddleware))
 
-	s.router.HandleFunc("/{owner}/{name}", playbackSSEStream).
-		Methods("GET").
-		Headers("Accept", "text/event-stream")
 	s.router.HandleFunc("/{owner}/{name}", s.recordStream).
 		Methods("POST")
 	s.router.HandleFunc("/{owner}/{name}", s.deleteStream).
@@ -126,6 +123,12 @@ func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 	out := StreamOut(owner, name)
 	cc := w.(http.CloseNotifier).CloseNotify()
 
+	write := w.Write
+	if isSSE(r) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		write = sseWriter{w}.Write
+	}
+
 	w.WriteHeader(200)
 
 	for {
@@ -137,7 +140,7 @@ func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 			return
 		case data, ok := <-out.Out():
 			if ok {
-				w.Write(data)
+				write(data)
 				w.(http.Flusher).Flush()
 			} else {
 				return
