@@ -1,16 +1,15 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"strings"
 
 	"github.com/benburkert/htee"
+	http "github.com/benburkert/httplus"
 )
 
 var usage = strings.TrimSpace(`
@@ -141,14 +140,14 @@ func loadConfig(configFile string) *htee.ClientConfig {
 
 func newBufferedWriter(w io.Writer) *bufferedWriter {
 	return &bufferedWriter{
-		writer: bufio.NewWriter(w),
+		writer: w,
 		flush:  false,
 		buffer: [][]byte{},
 	}
 }
 
 type bufferedWriter struct {
-	writer *bufio.Writer
+	writer io.Writer
 	flush  bool
 	buffer [][]byte
 }
@@ -170,6 +169,10 @@ func (fw *bufferedWriter) Write(p []byte) (nn int, err error) {
 }
 
 func (fw *bufferedWriter) Flush() (err error) {
+	if fw.flush {
+		return
+	}
+
 	fw.flush = true
 
 	for _, p := range fw.buffer {
@@ -180,5 +183,5 @@ func (fw *bufferedWriter) Flush() (err error) {
 		}
 	}
 
-	return fw.writer.Flush()
+	return
 }

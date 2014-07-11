@@ -2,9 +2,10 @@ package htee
 
 import (
 	"io"
-	"net/http"
 	"net/url"
 	"strings"
+
+	http "github.com/benburkert/httplus"
 )
 
 func NewClient(cnf *ClientConfig) (*Client, error) {
