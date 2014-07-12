@@ -2,6 +2,7 @@ package htee
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"io/ioutil"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/codegangsta/negroni"
 	"github.com/gorilla/mux"
@@ -66,9 +68,22 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 	owner := vars["owner"]
 	name := vars["name"]
 
-	if r.ExpectsContinue() {
-		w.ContinueHeader().Set("Location", r.URL.Path)
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		s.handleError(w, r, errors.New("webserver doesn't support hijacking"))
+		return
 	}
+
+	conn, bufrw, err := hj.Hijack()
+	if err != nil {
+		s.handleError(w, r, err)
+	}
+
+	defer conn.Close()
+
+	bufrw.WriteString("HTTP/1.1 100 Continue\r\n")
+	bufrw.WriteString("Location: " + r.URL.Path + "\r\n\r\n")
+	bufrw.Flush()
 
 	in := StreamIn(owner, name)
 	inc := in.In()
@@ -87,8 +102,10 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 			if n, err := r.Body.Read(buf); err == io.EOF || err == io.ErrUnexpectedEOF {
 				inc <- buf[:n]
 
-				w.WriteHeader(204)
-				w.(http.Flusher).Flush()
+				bufrw.WriteString("HTTP/1.1 204 No Content\r\n")
+				bufrw.WriteString("Date: " + time.Now().UTC().Format(time.RFC1123) + "\r\n")
+				bufrw.WriteString("Connection: close\r\n\r\n")
+				bufrw.Flush()
 
 				return
 			} else if err != nil {
@@ -151,7 +168,7 @@ func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	s.logger.Printf("%s - ERROR: %s", r.RemoteAddr, err.Error())
-	w.WriteHeader(500)
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
 
 func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
