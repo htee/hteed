@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/codegangsta/negroni"
-	"github.com/gorilla/mux"
 )
 
 var (
@@ -35,7 +34,6 @@ func configureServer(cnf *ServerConfig) error {
 
 func ServerHandler() http.Handler {
 	s := &server{
-		router:    mux.NewRouter(),
 		transport: &http.Transport{},
 		upstream:  upstream,
 		logger:    log.New(os.Stdout, "[server]", log.LstdFlags),
@@ -44,29 +42,30 @@ func ServerHandler() http.Handler {
 	n := negroni.New()
 	n.Use(negroni.HandlerFunc(s.upstreamMiddleware))
 
-	s.router.HandleFunc("/{owner}/{name}", s.recordStream).
-		Methods("POST")
-	s.router.HandleFunc("/{owner}/{name}", s.deleteStream).
-		Methods("DELETE")
-	s.router.HandleFunc("/{owner}/{name}", s.playbackStream).
-		Methods("GET").Name("stream")
-
-	n.UseHandler(s.router)
+	n.UseHandler(http.HandlerFunc(s.topHandler))
 
 	return n
 }
 
 type server struct {
 	logger    *log.Logger
-	router    *mux.Router
 	transport *http.Transport
 	upstream  *url.URL
 }
 
+func (s *server) topHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "GET":
+		s.playbackStream(w, r)
+	case "POST":
+		s.recordStream(w, r)
+	case "DELETE":
+		s.deleteStream(w, r)
+	}
+}
+
 func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	owner := vars["owner"]
-	name := vars["name"]
+	name := r.URL.Path[1:]
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -85,7 +84,7 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 	bufrw.WriteString("Location: " + r.URL.Path + "\r\n\r\n")
 	bufrw.Flush()
 
-	in := StreamIn(owner, name)
+	in := StreamIn(name)
 	inc := in.In()
 
 	defer in.Close()
@@ -120,11 +119,9 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteStream(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	owner := vars["owner"]
-	name := vars["name"]
+	name := r.URL.Path[1:]
 
-	if err := StreamDelete(owner, name); err != nil {
+	if err := StreamDelete(name); err != nil {
 		s.handleError(w, r, err)
 	} else {
 		w.WriteHeader(204)
@@ -133,11 +130,9 @@ func (s *server) deleteStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	owner := vars["owner"]
-	name := vars["name"]
+	name := r.URL.Path[1:]
 
-	out := StreamOut(owner, name)
+	out := StreamOut(name)
 	cc := w.(http.CloseNotifier).CloseNotify()
 
 	write := w.Write

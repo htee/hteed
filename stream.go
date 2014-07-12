@@ -46,8 +46,8 @@ func configureStream(cnf *ServerConfig) error {
 	return nil
 }
 
-func StreamIn(owner, name string) InStream {
-	s := newStream(owner, name)
+func StreamIn(name string) InStream {
+	s := newStream(name)
 	s.open()
 
 	go s.streamIn()
@@ -55,21 +55,20 @@ func StreamIn(owner, name string) InStream {
 	return s
 }
 
-func StreamOut(owner, name string) OutStream {
-	s := newStream(owner, name)
+func StreamOut(name string) OutStream {
+	s := newStream(name)
 
 	go s.streamOut()
 
 	return s
 }
 
-func StreamDelete(owner, name string) error {
-	return newStream(owner, name).delete()
+func StreamDelete(name string) error {
+	return newStream(name).delete()
 }
 
-func newStream(owner, name string) *stream {
+func newStream(name string) *stream {
 	return &stream{
-		owner:  owner,
 		name:   name,
 		conn:   pool.Get(),
 		data:   make(chan []byte),
@@ -79,7 +78,6 @@ func newStream(owner, name string) *stream {
 }
 
 type Stream interface {
-	Owner() string
 	Name() string
 
 	Close()
@@ -99,7 +97,7 @@ type OutStream interface {
 }
 
 type stream struct {
-	owner, name string
+	name string
 
 	conn redis.Conn
 
@@ -109,8 +107,6 @@ type stream struct {
 
 	closed bool
 }
-
-func (s *stream) Owner() string { return s.owner }
 
 func (s *stream) Name() string { return s.name }
 
@@ -238,10 +234,8 @@ func (s *stream) getState() (State, error) {
 	return State(state), err
 }
 
-func (s *stream) stateKey() string { return keyPrefix + "state:" + s.nwo() }
+func (s *stream) stateKey() string { return keyPrefix + "state:" + s.name }
 
-func (s *stream) dataKey() string { return keyPrefix + "data:" + s.nwo() }
+func (s *stream) dataKey() string { return keyPrefix + "data:" + s.name }
 
-func (s *stream) streamKey() string { return keyPrefix + s.nwo() }
-
-func (s *stream) nwo() string { return s.owner + "/" + s.name }
+func (s *stream) streamKey() string { return keyPrefix + s.name }

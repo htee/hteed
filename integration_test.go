@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/benburkert/httplus"
 	"github.com/garyburd/redigo/redis"
 )
 
@@ -177,7 +178,7 @@ func TestStreamingFanOut(t *testing.T) {
 		t.Errorf("stream owner is %s, want %s", owner, client.Login)
 	}
 
-	responses := make([](*http.Response), peers)
+	responses := make([](*httplus.Response), peers)
 	for i := range responses {
 		if res, err := client.GetStream(client.Login, name); err != nil {
 			t.Error(err)
@@ -344,7 +345,7 @@ func fakeWebHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func readNWO(res *http.Response) (owner, name string) {
+func readNWO(res *httplus.Response) (owner, name string) {
 	loc := res.Header.Get("Location")
 	parts := strings.Split(loc[1:], "/")
 	owner, name = parts[0], parts[1]

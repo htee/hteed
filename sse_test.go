@@ -1,16 +1,23 @@
 package htee
 
-import "testing"
+import (
+	"io"
+	"testing"
+)
 
 func TestSSEData(t *testing.T) {
-	uc := make(chan []byte)
-	ec := formatSSEData(uc)
+	r, w := io.Pipe()
+	sw := sseWriter{w}
 
 	assertEqual := func(before, after string) {
-		uc <- []byte(before)
+		go func() { sw.Write([]byte(before)) }()
 
-		if result := <-ec; result != after {
-			t.Errorf("SSE formatted data is %q, want %q", result, after)
+		result := make([]byte, len(after))
+
+		r.Read(result)
+
+		if string(result) != after {
+			t.Errorf("SSE formatted data is %q, want %q", string(result), after)
 		}
 	}
 
