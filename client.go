@@ -15,19 +15,21 @@ func NewClient(cnf *ClientConfig) (*Client, error) {
 	}
 
 	return &Client{
-		c:        &http.Client{},
-		Endpoint: url,
-		Login:    cnf.Login,
-		token:    cnf.Token,
+		c:         &http.Client{},
+		Endpoint:  url,
+		Login:     cnf.Login,
+		token:     cnf.Token,
+		anonymous: cnf.Anonymous,
 	}, nil
 }
 
 type Client struct {
 	c *http.Client
 
-	Endpoint *url.URL
-	Login    string
-	token    string
+	Endpoint  *url.URL
+	Login     string
+	token     string
+	anonymous bool
 }
 
 func (c *Client) GetStream(owner, name string) (*http.Response, error) {
@@ -63,7 +65,10 @@ func buildDelete(url *url.URL) *http.Request {
 func (c *Client) buildPost(url *url.URL, body io.ReadCloser) *http.Request {
 	hdr := defaultHeader()
 	hdr.Set("Expect", "100-Continue")
-	hdr.Set("Authorization", "Token "+c.token)
+
+	if !c.anonymous {
+		hdr.Set("Authorization", "Token "+c.token)
+	}
 
 	return buildRequest("POST", url, hdr, body)
 }

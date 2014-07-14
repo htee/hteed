@@ -17,10 +17,12 @@ htee
 
 Usage:
     htee
+	htee [--anonymous]
     htee [--token=<token>]
     htee -h | --help
 
 Options:
+    -a, --anon, --anonymous Anonymous stream
     -c, --config FILE       Configuration file
     -e, --endpoint URL      htee URL
     -t, --token TOKEN       API authentication token
@@ -34,10 +36,10 @@ func main() {
 
 	fs := flag.NewFlagSet("htee", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
-	fs.StringVar(&configFile, "c", "", "")
-	fs.StringVar(&configFile, "config", "~/.htee", "")
+	fs.StringVar(&configFile, "c", "~/.htee", "")
+	fs.StringVar(&configFile, "config", configFile, "")
 	fs.BoolVar(&showHelp, "h", false, "")
-	fs.BoolVar(&showHelp, "help", false, "")
+	fs.BoolVar(&showHelp, "help", showHelp, "")
 
 	fs.Parse(arguments)
 
@@ -124,6 +126,10 @@ func loadConfig(configFile string) *htee.ClientConfig {
 
 	fs.StringVar(&config.Login, "l", config.Login, "")
 	fs.StringVar(&config.Login, "login", config.Login, "")
+
+	fs.BoolVar(&config.Anonymous, "a", config.Anonymous, "")
+	fs.BoolVar(&config.Anonymous, "anon", config.Anonymous, "")
+	fs.BoolVar(&config.Anonymous, "anonymous", config.Anonymous, "")
 
 	var __ string
 	fs.StringVar(&__, "c", "", "")

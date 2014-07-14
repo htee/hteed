@@ -39,9 +39,10 @@ type Config struct {
 type ClientConfig struct {
 	Name string
 
-	Endpoint string `toml:"endpoint" env:"HTEE_ENDPOINT"`
-	Login    string `toml:"login" env:"HTEE_LOGIN"`
-	Token    string `toml:"token" env:"HTEE_TOKEN"`
+	Anonymous bool   `toml:"anonymous" env:"HTEE_ANONYMOUS"`
+	Endpoint  string `toml:"endpoint" env:"HTEE_ENDPOINT"`
+	Login     string `toml:"login" env:"HTEE_LOGIN"`
+	Token     string `toml:"token" env:"HTEE_TOKEN"`
 }
 
 type ServerConfig struct {
