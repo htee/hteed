@@ -3,6 +3,7 @@ package htee
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -16,8 +17,8 @@ import (
 )
 
 var (
-	upstream  *url.URL
-	authToken string
+	upstream   *url.URL
+	authHeader string
 )
 
 func init() {
@@ -25,17 +26,45 @@ func init() {
 }
 
 func configureServer(cnf *ServerConfig) error {
-	authToken = cnf.WebToken
+	authHeader = "Token " + cnf.WebToken
 
 	var err error
 	upstream, err = url.Parse(cnf.WebURL)
+	if err != nil {
+		return err
+	}
+
+	pingURL, err := upstream.Parse("/ping")
+	if err != nil {
+		return err
+	}
+
+	pingReq, err := http.NewRequest("GET", pingURL.String(), nil)
+	if err != nil {
+		return err
+	}
+
+	pingReq.Header.Set("X-Htee-Authorization", authHeader)
+	pingClient := http.Client{
+		Timeout: 1 * time.Second,
+	}
+
+	pingRes, err := pingClient.Do(pingReq)
+	if err != nil {
+		return err
+	}
+
+	if pingRes.StatusCode != 200 {
+		return fmt.Errorf("Expected 200 OK response from upstream ping, got %s", pingRes.Status)
+	}
+
 	return err
 }
 
 func ServerHandler() http.Handler {
 	s := &server{
 		transport: &http.Transport{
-			ResponseHeaderTimeout: 5 * time.Second,
+			ResponseHeaderTimeout: 15 * time.Second,
 		},
 		upstream: upstream,
 		logger:   log.New(os.Stdout, "[server] ", log.LstdFlags),
@@ -241,7 +270,7 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 	}
 
 	uh.Set("X-Forwarded-Host", r.Host)
-	uh.Set("X-Htee-Authorization", "Token "+authToken)
+	uh.Set("X-Htee-Authorization", authHeader)
 
 	ur.Header = uh
 
