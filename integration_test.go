@@ -30,7 +30,9 @@ func init() {
 		KeyPrefix: fmt.Sprintf("%d:", os.Getpid()),
 	}
 
-	Configure(sc)
+	if err := Configure(sc); err != nil {
+		panic(err.Error())
+	}
 }
 
 func testClient(url string) (*Client, error) {
@@ -326,6 +328,12 @@ func TestDeleteStreamRequest(t *testing.T) {
 }
 
 func fakeWebHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/ping" {
+		w.WriteHeader(200)
+		w.Write([]byte("PONG!"))
+		return
+	}
+
 	switch r.Method {
 	case "GET", "DELETE":
 		w.WriteHeader(204)
