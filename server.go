@@ -34,9 +34,11 @@ func configureServer(cnf *ServerConfig) error {
 
 func ServerHandler() http.Handler {
 	s := &server{
-		transport: &http.Transport{},
-		upstream:  upstream,
-		logger:    log.New(os.Stdout, "[server]", log.LstdFlags),
+		transport: &http.Transport{
+			ResponseHeaderTimeout: 5 * time.Second,
+		},
+		upstream: upstream,
+		logger:   log.New(os.Stdout, "[server] ", log.LstdFlags),
 	}
 
 	n := negroni.New()
