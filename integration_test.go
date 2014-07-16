@@ -335,7 +335,7 @@ func fakeWebHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch r.Method {
-	case "GET", "DELETE":
+	case "GET", "DELETE", "PUT":
 		w.WriteHeader(204)
 	case "POST":
 		owner := "test"

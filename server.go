@@ -1,6 +1,7 @@
 package htee
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -96,7 +97,7 @@ func (s *server) topHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Path[1:]
+	name := r.URL.Path
 
 	hj, ok := w.(http.Hijacker)
 	if !ok {
@@ -137,6 +138,8 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 				bufrw.WriteString("Connection: close\r\n\r\n")
 				bufrw.Flush()
 
+				go s.notifyUpstream(name, "closed")
+
 				return
 			} else if err != nil {
 				s.handleError(w, r, err)
@@ -150,7 +153,7 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteStream(w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Path[1:]
+	name := r.URL.Path
 
 	if err := StreamDelete(name); err != nil {
 		s.handleError(w, r, err)
@@ -161,7 +164,7 @@ func (s *server) deleteStream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Path[1:]
+	name := r.URL.Path
 
 	out := StreamOut(name)
 	cc := w.(http.CloseNotifier).CloseNotify()
@@ -264,7 +267,7 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	uh := http.Header{}
+	uh := ur.Header
 	for k, _ := range r.Header {
 		uh.Set(k, r.Header.Get(k))
 	}
@@ -272,9 +275,43 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 	uh.Set("X-Forwarded-Host", r.Host)
 	uh.Set("X-Htee-Authorization", authHeader)
 
-	ur.Header = uh
-
 	return s.transport.RoundTrip(ur)
+}
+
+func (s *server) notifyUpstream(name, status string) {
+	path, err := s.upstream.Parse(name)
+	if err != nil {
+		s.logger.Printf("notifyUpstream - ERROR: %s", err.Error())
+		return
+	}
+
+	body, err := json.Marshal(map[string]string{"stream": name, "status": status})
+	if err != nil {
+		s.logger.Printf("notifyUpstream - ERROR: %s", err.Error())
+		return
+	}
+
+	req, err := http.NewRequest("PUT", path.String(), bytes.NewReader(body))
+	if err != nil {
+		s.logger.Printf("notifyUpstream - ERROR: %s", err.Error())
+		return
+	}
+
+	h := req.Header
+	h.Set("X-Htee-Authorization", authHeader)
+	h.Set("Content-Type", "application/json")
+
+	res, err := s.transport.RoundTrip(req)
+	if err != nil {
+		s.logger.Printf("notifyUpstream - ERROR: %s", err.Error())
+		return
+	}
+
+	if res.StatusCode != 204 {
+		body, _ := ioutil.ReadAll(res.Body)
+		msg := fmt.Sprintf("%s %s", res.Status, body)
+		s.logger.Printf("notifyUpstream - Unexpected Response: %s", msg)
+	}
 }
 
 func proxyResponse(w http.ResponseWriter, r *http.Response) error {
