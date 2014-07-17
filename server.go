@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
@@ -202,52 +203,60 @@ func (s *server) handleError(w http.ResponseWriter, r *http.Request, err error) 
 
 func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 	ur, err := s.proxyUpstream(r)
-
 	if err != nil {
 		s.handleError(w, r, err)
 		return
-	} else if ur.StatusCode == 202 {
-		if strings.Contains(ur.Header.Get("Content-Type"), "application/json") {
-			var message struct {
-				Method, Path, Body string
-				Headers            map[string]string
-			}
+	}
 
-			dec := json.NewDecoder(ur.Body)
-			if err = dec.Decode(&message); err != nil {
-				s.handleError(w, r, err)
-				return
-			}
+	switch ur.StatusCode {
+	case 202:
 
-			if message.Body != "" {
-				r.Method = message.Method
-			}
-
-			if message.Path != "" {
-				if r.URL, err = r.URL.Parse(message.Path); err != nil {
-					s.handleError(w, r, err)
-					return
-				}
-			}
-
-			for k, v := range message.Headers {
-				r.Header.Set(k, v)
-			}
-
-			if message.Body != "" {
-				r.Body = ioutil.NopCloser(strings.NewReader(message.Body))
-			}
-		}
-	} else if ur.StatusCode != 204 {
-		if err = proxyResponse(w, ur); err != nil {
+		if err := rewriteRequest(r, ur); err != nil {
 			s.handleError(w, r, err)
-			return
+		} else {
+			next(w, r)
+		}
+	case 204:
+		next(w, r)
+	default:
+		if ur.Header.Get("X-Htee-Downstream-Continue") != "" {
+			ur.Header.Del("X-Htee-Downstream-Continue")
+			go next(httptest.NewRecorder(), r)
 		}
 
+		proxyResponse(w, ur)
+	}
+}
+
+func rewriteRequest(r *http.Request, ur *http.Response) (err error) {
+	var message struct {
+		Method, Path, Body string
+		Headers            map[string]string
+	}
+	dec := json.NewDecoder(ur.Body)
+	if err = dec.Decode(&message); err != nil {
 		return
 	}
 
-	next(w, r)
+	if message.Body != "" {
+		r.Method = message.Method
+	}
+
+	if message.Path != "" {
+		if r.URL, err = r.URL.Parse(message.Path); err != nil {
+			return
+		}
+	}
+
+	for k, v := range message.Headers {
+		r.Header.Set(k, v)
+	}
+
+	if message.Body != "" {
+		r.Body = ioutil.NopCloser(strings.NewReader(message.Body))
+	}
+
+	return
 }
 
 func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
