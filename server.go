@@ -74,6 +74,7 @@ func ServerHandler() http.Handler {
 
 	n := negroni.New()
 	n.Use(negroni.HandlerFunc(s.upstreamMiddleware))
+	n.Use(negroni.HandlerFunc(s.fixRailsVerbMiddleware))
 
 	n.UseHandler(http.HandlerFunc(s.topHandler))
 
@@ -211,52 +212,67 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 	switch ur.StatusCode {
 	case 202:
 
-		if err := rewriteRequest(r, ur); err != nil {
+		if rr, err := parseRewriteRequest(r, ur); err != nil {
 			s.handleError(w, r, err)
 		} else {
-			next(w, r)
+			next(w, rr)
 		}
 	case 204:
 		next(w, r)
 	default:
 		if ur.Header.Get("X-Htee-Downstream-Continue") != "" {
 			ur.Header.Del("X-Htee-Downstream-Continue")
-			go next(httptest.NewRecorder(), r)
+
+			if rr, err := cloneRequest(r); err != nil {
+				s.handleError(w, r, err)
+			} else {
+				go next(httptest.NewRecorder(), rr)
+			}
 		}
 
 		proxyResponse(w, ur)
 	}
 }
 
-func rewriteRequest(r *http.Request, ur *http.Response) (err error) {
+func parseRewriteRequest(req *http.Request, res *http.Response) (*http.Request, error) {
 	var message struct {
 		Method, Path, Body string
 		Headers            map[string]string
 	}
-	dec := json.NewDecoder(ur.Body)
-	if err = dec.Decode(&message); err != nil {
-		return
+
+	dec := json.NewDecoder(res.Body)
+	if err := dec.Decode(&message); err != nil {
+		return nil, err
 	}
 
-	if message.Body != "" {
+	r, err := cloneRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if message.Method != "" {
 		r.Method = message.Method
 	}
 
 	if message.Path != "" {
-		if r.URL, err = r.URL.Parse(message.Path); err != nil {
-			return
+		if url, err := req.URL.Parse(message.Path); err != nil {
+			return nil, err
+		} else {
+			r.URL = url
 		}
 	}
 
-	for k, v := range message.Headers {
-		r.Header.Set(k, v)
+	if len(message.Headers) > 0 {
+		for k, v := range message.Headers {
+			r.Header.Set(k, v)
+		}
 	}
 
 	if message.Body != "" {
 		r.Body = ioutil.NopCloser(strings.NewReader(message.Body))
 	}
 
-	return
+	return r, nil
 }
 
 func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
@@ -266,9 +282,14 @@ func (s *server) proxyUpstream(r *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 
-	if len(r.TransferEncoding) == 0 || r.TransferEncoding[0] != "chunked" {
-		body = r.Body
-		r.Body = ioutil.NopCloser(strings.NewReader(""))
+	if !isChunked(r) {
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+		body = ioutil.NopCloser(bytes.NewBuffer(data))
 	}
 
 	ur, err := http.NewRequest(r.Method, uu.String(), body)
@@ -334,4 +355,36 @@ func proxyResponse(w http.ResponseWriter, r *http.Response) error {
 
 	_, err := io.Copy(w, r.Body)
 	return err
+}
+
+func (s *server) fixRailsVerbMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	if r.Method == "POST" && r.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
+		r.ParseForm()
+
+		if method := r.Form["_method"][0]; method != "" {
+			r.Method = strings.ToUpper(method)
+		}
+	}
+
+	next(w, r)
+}
+
+func isChunked(r *http.Request) bool {
+	return len(r.TransferEncoding) > 0 && r.TransferEncoding[0] == "chunked"
+}
+
+func cloneRequest(r *http.Request) (*http.Request, error) {
+	cr := new(http.Request)
+	*cr = *r
+
+	if !isChunked(r) {
+		data, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		cr.Body = ioutil.NopCloser(bytes.NewBuffer(data))
+	}
+
+	return cr, nil
 }
