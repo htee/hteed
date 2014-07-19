@@ -23,6 +23,19 @@ func NewClient(cnf *ClientConfig) (*Client, error) {
 	}, nil
 }
 
+func LiteClient(streamURL string) (*Client, error) {
+	url, err := url.Parse(streamURL)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		c:         &http.Client{},
+		Endpoint:  url,
+		anonymous: true,
+	}, nil
+}
+
 type Client struct {
 	c *http.Client
 
