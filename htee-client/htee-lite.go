@@ -12,107 +12,46 @@ import (
 
 func main() {
 	if len(os.Args) < 2 || os.Args[1] == "" {
-		fmt.Fprintf(os.Stderr, "missing url argument\n")
-
-		os.Exit(1)
+		abort("missing url argument")
 	}
 
 	url := os.Args[1]
 
 	client, err := htee.LiteClient(url)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-
-		os.Exit(1)
+		abort(err.Error())
 	}
 
-	buffOut := newBufferedWriter(io.Writer(os.Stdout))
-	rc := ioutil.NopCloser(io.TeeReader(io.Reader(os.Stdin), buffOut))
+	rc := ioutil.NopCloser(io.TeeReader(io.Reader(os.Stdin), io.Writer(os.Stdout)))
 
 	res, err := client.PostStream(rc)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-
-		os.Exit(1)
+		abort(err.Error())
 	}
 
 	if res.StatusCode != http.StatusContinue {
-		fmt.Fprintf(os.Stderr, "unexpected server response %q\n", res.Status)
-		os.Exit(1)
+		abort("unexpected server response %q\n")
 	}
 
 	if path := res.Header.Get("Location"); path == "" {
-		os.Stderr.Write([]byte("server did not supply a Location header\n"))
-		os.Exit(1)
+		abort("server did not supply a Location header")
 	} else {
-		if u, err := client.Endpoint.Parse(path); err != nil {
-			fmt.Fprintf(os.Stderr, err.Error())
-
-			os.Exit(1)
-		} else {
-			fmt.Fprintf(os.Stderr, "%s\n", u.String())
+		if _, err := client.Endpoint.Parse(path); err != nil {
+			abort(err.Error())
 		}
 	}
-
-	buffOut.Flush()
 
 	res, err = res.NextResponse()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, err.Error())
-
-		os.Exit(1)
+		abort(err.Error())
 	}
 
 	if res.StatusCode != http.StatusNoContent {
-		fmt.Fprintf(os.Stderr, "unexpected server response %q\n", res.Status)
-		os.Exit(1)
+		abort("unexpected server response %q\n")
 	}
 }
 
-func newBufferedWriter(w io.Writer) *bufferedWriter {
-	return &bufferedWriter{
-		writer: w,
-		flush:  false,
-		buffer: [][]byte{},
-	}
-}
-
-type bufferedWriter struct {
-	writer io.Writer
-	flush  bool
-	buffer [][]byte
-}
-
-func (fw *bufferedWriter) Write(p []byte) (nn int, err error) {
-	var n int
-
-	if fw.flush {
-		for n, nn = 0, 0; nn < len(p); nn += n {
-			if n, err = fw.writer.Write(p); err != nil {
-				return
-			}
-		}
-	} else {
-		fw.buffer = append(fw.buffer, p)
-	}
-
-	return
-}
-
-func (fw *bufferedWriter) Flush() (err error) {
-	if fw.flush {
-		return
-	}
-
-	fw.flush = true
-
-	for _, p := range fw.buffer {
-		for n, nn := 0, 0; nn < len(p); nn += n {
-			if n, err = fw.writer.Write(p); err != nil {
-				return
-			}
-		}
-	}
-
-	return
+func abort(err string) {
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
 }
