@@ -1,4 +1,4 @@
-package htee
+package config
 
 import (
 	"fmt"

@@ -8,7 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/benburkert/htee"
+	"github.com/htee/hteed/config"
+	"github.com/htee/hteed/server"
 )
 
 var usage = strings.TrimSpace(`
@@ -46,25 +47,25 @@ func main() {
 	}
 	c := loadConfig(configFile)
 
-	if err := htee.Configure(c); err != nil {
+	if err := config.Configure(c); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 		os.Exit(1)
 	}
 
-	http.ListenAndServe(c.Addr(), htee.ServerHandler())
+	http.ListenAndServe(c.Addr(), server.ServerHandler())
 }
 
-func loadConfig(configFile string) *htee.ServerConfig {
-	config := &htee.ServerConfig{
+func loadConfig(configFile string) *config.ServerConfig {
+	cfg := &config.ServerConfig{
 		Address:  "0.0.0.0",
 		Port:     4000,
 		RedisURL: ":6379",
 		WebURL:   "http://0.0.0.0:3000/",
 	}
 
-	gconfig := &htee.Config{
+	gconfig := &config.Config{
 		ConfigFile: configFile,
-		Server:     config,
+		Server:     cfg,
 	}
 
 	if err := gconfig.Load(); err != nil {
@@ -76,21 +77,21 @@ func loadConfig(configFile string) *htee.ServerConfig {
 	fs := flag.NewFlagSet("hteed", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
 
-	fs.StringVar(&config.Address, "a", config.Address, "")
-	fs.StringVar(&config.Address, "address", config.Address, "")
+	fs.StringVar(&cfg.Address, "a", cfg.Address, "")
+	fs.StringVar(&cfg.Address, "address", cfg.Address, "")
 
-	fs.IntVar(&config.Port, "p", config.Port, "")
-	fs.IntVar(&config.Port, "port", config.Port, "")
+	fs.IntVar(&cfg.Port, "p", cfg.Port, "")
+	fs.IntVar(&cfg.Port, "port", cfg.Port, "")
 
-	fs.StringVar(&config.RedisURL, "r", config.RedisURL, "")
-	fs.StringVar(&config.RedisURL, "redis-url", config.RedisURL, "")
+	fs.StringVar(&cfg.RedisURL, "r", cfg.RedisURL, "")
+	fs.StringVar(&cfg.RedisURL, "redis-url", cfg.RedisURL, "")
 
-	fs.StringVar(&config.WebURL, "w", config.WebURL, "")
-	fs.StringVar(&config.WebURL, "web-url", config.WebURL, "")
+	fs.StringVar(&cfg.WebURL, "w", cfg.WebURL, "")
+	fs.StringVar(&cfg.WebURL, "web-url", cfg.WebURL, "")
 
 	var __ string
 	fs.StringVar(&__, "c", "", "")
-	fs.StringVar(&__, "config", "", "")
+	fs.StringVar(&__, "cfg", "", "")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		fmt.Printf("%s\n\n", usage)
@@ -98,5 +99,5 @@ func loadConfig(configFile string) *htee.ServerConfig {
 		os.Exit(1)
 	}
 
-	return config
+	return cfg
 }

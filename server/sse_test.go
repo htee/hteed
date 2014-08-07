@@ -1,4 +1,4 @@
-package htee
+package server
 
 import (
 	"io"

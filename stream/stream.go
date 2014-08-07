@@ -1,10 +1,11 @@
-package htee
+package stream
 
 import (
 	"errors"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
+	"github.com/htee/hteed/config"
 )
 
 type State byte
@@ -20,10 +21,10 @@ var (
 )
 
 func init() {
-	ConfigCallback(configureStream)
+	config.ConfigCallback(configureStream)
 }
 
-func configureStream(cnf *ServerConfig) error {
+func configureStream(cnf *config.ServerConfig) error {
 	pool = &redis.Pool{
 		Dial: func() (redis.Conn, error) {
 			return redis.Dial("tcp", cnf.RedisURL)

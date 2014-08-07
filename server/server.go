@@ -1,4 +1,4 @@
-package htee
+package server
 
 import (
 	"bytes"
@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/codegangsta/negroni"
+	"github.com/htee/hteed/config"
+	"github.com/htee/hteed/stream"
 )
 
 var (
@@ -24,10 +26,10 @@ var (
 )
 
 func init() {
-	ConfigCallback(configureServer)
+	config.ConfigCallback(configureServer)
 }
 
-func configureServer(cnf *ServerConfig) error {
+func configureServer(cnf *config.ServerConfig) error {
 	authHeader = "Token " + cnf.WebToken
 
 	var err error
@@ -118,7 +120,7 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 	bufrw.WriteString("Location: " + r.URL.Path + "\r\n\r\n")
 	bufrw.Flush()
 
-	in := StreamIn(name)
+	in := stream.StreamIn(name)
 	inc := in.In()
 
 	defer in.Close()
@@ -157,7 +159,7 @@ func (s *server) recordStream(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteStream(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Path
 
-	if err := StreamDelete(name); err != nil {
+	if err := stream.StreamDelete(name); err != nil {
 		s.handleError(w, r, err)
 	} else {
 		w.WriteHeader(204)
@@ -168,7 +170,7 @@ func (s *server) deleteStream(w http.ResponseWriter, r *http.Request) {
 func (s *server) playbackStream(w http.ResponseWriter, r *http.Request) {
 	name := r.URL.Path
 
-	out := StreamOut(name)
+	out := stream.StreamOut(name)
 	cc := w.(http.CloseNotifier).CloseNotify()
 
 	write := w.Write
