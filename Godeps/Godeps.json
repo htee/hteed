@@ -1,0 +1,19 @@
+{
+	"ImportPath": "github.com/htee/hteed",
+	"GoVersion": "go1.3",
+	"Deps": [
+		{
+			"ImportPath": "github.com/BurntSushi/toml",
+			"Rev": "bd2bdf7f18f849530ef7a1c29a4290217cab32a1"
+		},
+		{
+			"ImportPath": "github.com/codegangsta/negroni",
+			"Comment": "v0.1-12-gf748f64",
+			"Rev": "f748f647992cac5626feb04f477faea7c8f8f21b"
+		},
+		{
+			"ImportPath": "github.com/garyburd/redigo/redis",
+			"Rev": "1c7841955920910958c71b1cc1a03f628267d468"
+		}
+	]
+}
