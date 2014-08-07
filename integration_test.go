@@ -16,9 +16,7 @@ import (
 	"time"
 
 	"github.com/benburkert/httplus"
-
-	"github.com/htee/htee/client"
-	cconfig "github.com/htee/htee/config"
+	"github.com/htee/htee"
 
 	"github.com/htee/hteed/config"
 	"github.com/htee/hteed/server"
@@ -44,8 +42,8 @@ func init() {
 	}
 }
 
-func testClient(url string) (*client.Client, error) {
-	return client.NewClient(&cconfig.Config{Endpoint: url, Login: "test"})
+func testClient(url string) (*htee.Client, error) {
+	return htee.NewClient(&htee.Config{Endpoint: url, Login: "test"})
 }
 
 func delTestData() {
