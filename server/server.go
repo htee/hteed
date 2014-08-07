@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codegangsta/negroni"
+	"github.com/htee/hteed/Godeps/_workspace/src/github.com/codegangsta/negroni"
 	"github.com/htee/hteed/config"
 	"github.com/htee/hteed/stream"
 )

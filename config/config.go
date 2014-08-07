@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/BurntSushi/toml"
+	"github.com/htee/hteed/Godeps/_workspace/src/github.com/BurntSushi/toml"
 )
 
 var (

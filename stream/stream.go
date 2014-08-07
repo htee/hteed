@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
+	"github.com/htee/hteed/Godeps/_workspace/src/github.com/garyburd/redigo/redis"
 	"github.com/htee/hteed/config"
 )
 
