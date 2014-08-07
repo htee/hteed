@@ -18,6 +18,7 @@ const (
 var (
 	pool      *redis.Pool
 	keyPrefix string
+	testing   bool
 )
 
 func init() {
@@ -43,6 +44,30 @@ func configureStream(cnf *config.Config) error {
 	}
 
 	keyPrefix = cnf.KeyPrefix
+	testing = cnf.Testing
+
+	return nil
+}
+
+func Reset() error {
+	if !testing {
+		return errors.New("Reset disabled unless testing")
+	}
+
+	if keyPrefix == "" {
+		return errors.New("Reset requires a key prefix")
+	}
+
+	conn := pool.Get()
+
+	keys, err := redis.Strings(conn.Do("KEYS", keyPrefix+"*"))
+	if err != nil {
+		return err
+	}
+
+	for _, key := range keys {
+		conn.Do("DEL", key)
+	}
 
 	return nil
 }

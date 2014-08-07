@@ -1,6 +1,6 @@
 // +build integration
 
-package htee
+package main
 
 import (
 	"encoding/json"
@@ -16,46 +16,48 @@ import (
 	"time"
 
 	"github.com/benburkert/httplus"
-	"github.com/garyburd/redigo/redis"
+
+	"github.com/htee/htee/client"
+	cconfig "github.com/htee/htee/config"
+
+	"github.com/htee/hteed/config"
+	"github.com/htee/hteed/server"
+	"github.com/htee/hteed/stream"
 )
+
+var keyPrefix string = fmt.Sprintf("%d:", os.Getpid())
 
 func init() {
 	us := httptest.NewServer(http.HandlerFunc(fakeWebHandler))
 
-	sc := &ServerConfig{
+	cnf := &config.Config{
 		Address:   "127.0.0.1",
 		Port:      4000,
 		RedisURL:  ":6379",
 		WebURL:    us.URL,
-		KeyPrefix: fmt.Sprintf("%d:", os.Getpid()),
+		KeyPrefix: keyPrefix,
+		Testing:   true,
 	}
 
-	if err := Configure(sc); err != nil {
+	if err := config.Configure(cnf); err != nil {
 		panic(err.Error())
 	}
 }
 
-func testClient(url string) (*Client, error) {
-	return NewClient(&ClientConfig{Endpoint: url, Login: "test"})
+func testClient(url string) (*client.Client, error) {
+	return client.NewClient(&cconfig.Config{Endpoint: url, Login: "test"})
 }
 
 func delTestData() {
-	conn := pool.Get()
-
-	keys, err := redis.Strings(conn.Do("KEYS", keyPrefix+"*"))
-	if err != nil {
+	if err := stream.Reset(); err != nil {
 		panic(err)
-	}
-
-	for _, key := range keys {
-		conn.Do("DEL", key)
 	}
 }
 
 func TestHelloWorldRoundTrip(t *testing.T) {
-	defer delTestData()
+	defer stream.Reset()
 
-	ts := httptest.NewServer(ServerHandler())
+	ts := httptest.NewServer(server.ServerHandler())
 	defer ts.Close()
 
 	client, err := testClient(ts.URL)
@@ -99,7 +101,7 @@ func TestHelloWorldRoundTrip(t *testing.T) {
 func TestStreamingLockstep(t *testing.T) {
 	defer delTestData()
 
-	ts := httptest.NewServer(ServerHandler())
+	ts := httptest.NewServer(server.ServerHandler())
 	defer ts.Close()
 
 	client, err := testClient(ts.URL)
@@ -151,7 +153,7 @@ func TestStreamingLockstep(t *testing.T) {
 func TestStreamingFanOut(t *testing.T) {
 	defer delTestData()
 
-	ts := httptest.NewServer(ServerHandler())
+	ts := httptest.NewServer(server.ServerHandler())
 	defer ts.Close()
 
 	client, err := testClient(ts.URL)
@@ -209,7 +211,7 @@ func TestStreamingFanOut(t *testing.T) {
 func TestEventStreamRequest(t *testing.T) {
 	defer delTestData()
 
-	ts := httptest.NewServer(ServerHandler())
+	ts := httptest.NewServer(server.ServerHandler())
 	defer ts.Close()
 
 	client, err := testClient(ts.URL)
@@ -274,7 +276,7 @@ func TestEventStreamRequest(t *testing.T) {
 }
 
 func TestDeleteStreamRequest(t *testing.T) {
-	ts := httptest.NewServer(ServerHandler())
+	ts := httptest.NewServer(server.ServerHandler())
 
 	client, err := testClient(ts.URL)
 	if err != nil {

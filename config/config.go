@@ -31,6 +31,7 @@ func Configure(c *Config) error {
 
 type Config struct {
 	KeyPrefix string
+	Testing   bool
 
 	Address  string `toml:"address" env:"HTEE_ADDRESS"`
 	Port     int    `toml:"port" env"HTEE_PORT"`
