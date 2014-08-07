@@ -24,7 +24,7 @@ func init() {
 	config.ConfigCallback(configureStream)
 }
 
-func configureStream(cnf *config.ServerConfig) error {
+func configureStream(cnf *config.Config) error {
 	pool = &redis.Pool{
 		Dial: func() (redis.Conn, error) {
 			return redis.Dial("tcp", cnf.RedisURL)

@@ -55,20 +55,15 @@ func main() {
 	http.ListenAndServe(c.Addr(), server.ServerHandler())
 }
 
-func loadConfig(configFile string) *config.ServerConfig {
-	cfg := &config.ServerConfig{
+func loadConfig(configFile string) *config.Config {
+	cnf := &config.Config{
 		Address:  "0.0.0.0",
 		Port:     4000,
 		RedisURL: ":6379",
 		WebURL:   "http://0.0.0.0:3000/",
 	}
 
-	gconfig := &config.Config{
-		ConfigFile: configFile,
-		Server:     cfg,
-	}
-
-	if err := gconfig.Load(); err != nil {
+	if err := cnf.Load(configFile); err != nil {
 		fmt.Printf("%s\n\n", usage)
 		fmt.Printf("%s\n", err.Error())
 		os.Exit(1)
@@ -77,21 +72,21 @@ func loadConfig(configFile string) *config.ServerConfig {
 	fs := flag.NewFlagSet("hteed", flag.ContinueOnError)
 	fs.SetOutput(ioutil.Discard)
 
-	fs.StringVar(&cfg.Address, "a", cfg.Address, "")
-	fs.StringVar(&cfg.Address, "address", cfg.Address, "")
+	fs.StringVar(&cnf.Address, "a", cnf.Address, "")
+	fs.StringVar(&cnf.Address, "address", cnf.Address, "")
 
-	fs.IntVar(&cfg.Port, "p", cfg.Port, "")
-	fs.IntVar(&cfg.Port, "port", cfg.Port, "")
+	fs.IntVar(&cnf.Port, "p", cnf.Port, "")
+	fs.IntVar(&cnf.Port, "port", cnf.Port, "")
 
-	fs.StringVar(&cfg.RedisURL, "r", cfg.RedisURL, "")
-	fs.StringVar(&cfg.RedisURL, "redis-url", cfg.RedisURL, "")
+	fs.StringVar(&cnf.RedisURL, "r", cnf.RedisURL, "")
+	fs.StringVar(&cnf.RedisURL, "redis-url", cnf.RedisURL, "")
 
-	fs.StringVar(&cfg.WebURL, "w", cfg.WebURL, "")
-	fs.StringVar(&cfg.WebURL, "web-url", cfg.WebURL, "")
+	fs.StringVar(&cnf.WebURL, "w", cnf.WebURL, "")
+	fs.StringVar(&cnf.WebURL, "web-url", cnf.WebURL, "")
 
 	var __ string
 	fs.StringVar(&__, "c", "", "")
-	fs.StringVar(&__, "cfg", "", "")
+	fs.StringVar(&__, "cnf", "", "")
 
 	if err := fs.Parse(os.Args[1:]); err != nil {
 		fmt.Printf("%s\n\n", usage)
@@ -99,5 +94,5 @@ func loadConfig(configFile string) *config.ServerConfig {
 		os.Exit(1)
 	}
 
-	return cfg
+	return cnf
 }

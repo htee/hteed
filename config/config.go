@@ -12,14 +12,14 @@ import (
 )
 
 var (
-	callbacks = make([]func(*ServerConfig) error, 0)
+	callbacks = make([]func(*Config) error, 0)
 )
 
-func ConfigCallback(cb func(*ServerConfig) error) {
+func ConfigCallback(cb func(*Config) error) {
 	callbacks = append(callbacks, cb)
 }
 
-func Configure(c *ServerConfig) error {
+func Configure(c *Config) error {
 	for _, cb := range callbacks {
 		if err := cb(c); err != nil {
 			return err
@@ -30,22 +30,6 @@ func Configure(c *ServerConfig) error {
 }
 
 type Config struct {
-	ConfigFile string
-
-	Client *ClientConfig
-	Server *ServerConfig
-}
-
-type ClientConfig struct {
-	Name string
-
-	Anonymous bool   `toml:"anonymous" env:"HTEE_ANONYMOUS"`
-	Endpoint  string `toml:"endpoint" env:"HTEE_ENDPOINT"`
-	Login     string `toml:"login" env:"HTEE_LOGIN"`
-	Token     string `toml:"token" env:"HTEE_TOKEN"`
-}
-
-type ServerConfig struct {
 	KeyPrefix string
 
 	Address  string `toml:"address" env:"HTEE_ADDRESS"`
@@ -55,12 +39,12 @@ type ServerConfig struct {
 	WebToken string `toml:"web-token" env:"HTEE_WEB_TOKEN"`
 }
 
-func (c *ServerConfig) Addr() string {
+func (c *Config) Addr() string {
 	return c.Address + ":" + strconv.Itoa(c.Port)
 }
 
-func (c *Config) Load() error {
-	if err := c.loadConfigFile(); err != nil {
+func (c *Config) Load(cnfFile string) error {
+	if err := c.loadConfigFile(cnfFile); err != nil {
 		return err
 	}
 
@@ -71,22 +55,22 @@ func (c *Config) Load() error {
 	return nil
 }
 
-func (c *Config) loadConfigFile() error {
-	if c.ConfigFile[:2] == "~/" {
+func (c *Config) loadConfigFile(cnfFile string) error {
+	if cnfFile[:2] == "~/" {
 
 		usr, err := user.Current()
 		if err != nil {
 			return err
 		}
 
-		c.ConfigFile = strings.Replace(c.ConfigFile, "~", usr.HomeDir, 1)
+		cnfFile = strings.Replace(cnfFile, "~", usr.HomeDir, 1)
 	}
 
-	if _, err := os.Stat(c.ConfigFile); os.IsNotExist(err) {
+	if _, err := os.Stat(cnfFile); os.IsNotExist(err) {
 		return nil
 	}
 
-	_, err := toml.DecodeFile(c.ConfigFile, &c)
+	_, err := toml.DecodeFile(cnfFile, &c)
 	return err
 }
 

@@ -29,7 +29,7 @@ func init() {
 	config.ConfigCallback(configureServer)
 }
 
-func configureServer(cnf *config.ServerConfig) error {
+func configureServer(cnf *config.Config) error {
 	authHeader = "Token " + cnf.WebToken
 
 	var err error
