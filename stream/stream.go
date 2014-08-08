@@ -2,7 +2,10 @@ package stream
 
 import (
 	"errors"
+	"io"
 	"time"
+
+	"code.google.com/p/go.net/context"
 
 	"github.com/htee/hteed/Godeps/_workspace/src/github.com/garyburd/redigo/redis"
 	"github.com/htee/hteed/config"
@@ -72,33 +75,33 @@ func Reset() error {
 	return nil
 }
 
-func StreamIn(name string) InStream {
-	s := newStream(name)
-	s.open()
+func In(ctx context.Context, name string, reader io.Reader) InStream {
+	s := newStream(ctx, name)
 
-	go s.streamIn()
-
-	return s
-}
-
-func StreamOut(name string) OutStream {
-	s := newStream(name)
-
-	go s.streamOut()
+	go s.streamIn(reader)
 
 	return s
 }
 
-func StreamDelete(name string) error {
-	return newStream(name).delete()
+func Out(ctx context.Context, name string, writer io.Writer) OutStream {
+	s := newStream(ctx, name)
+
+	go s.streamOut(writer)
+
+	return s
 }
 
-func newStream(name string) *stream {
+func StreamDelete(ctx context.Context, name string) error {
+	return newStream(ctx, name).delete()
+}
+
+func newStream(ctx context.Context, name string) *stream {
 	return &stream{
+		ctx:    ctx,
 		name:   name,
 		conn:   pool.Get(),
 		data:   make(chan []byte),
-		err:    make(chan error),
+		done:   make(chan struct{}),
 		closed: false,
 	}
 }
@@ -106,8 +109,9 @@ func newStream(name string) *stream {
 type Stream interface {
 	Name() string
 
-	Close()
-	Errors() <-chan error
+	Cancel()
+	Done() <-chan struct{}
+	Err() error
 }
 
 type InStream interface {
@@ -123,62 +127,133 @@ type OutStream interface {
 }
 
 type stream struct {
+	ctx context.Context
+
 	name string
 
 	conn redis.Conn
 
 	data chan []byte
 
-	err chan error
+	err error
+
+	done chan struct{}
 
 	closed bool
 }
 
 func (s *stream) Name() string { return s.name }
 
-func (s *stream) Errors() <-chan error { return s.err }
+func (s *stream) Done() <-chan struct{} { return s.done }
+
+func (s *stream) Err() error { return s.err }
 
 func (s *stream) In() chan<- []byte { return s.data }
 
 func (s *stream) Out() <-chan []byte { return s.data }
 
-func (s *stream) Close() {
+func (s *stream) Cancel() { panic("TODO") }
+
+func (s *stream) close() {
 	if s.closed {
-		return
+		panic("Close() called twice")
 	}
 
 	s.closed = true
 	close(s.data)
+	close(s.done)
+	s.conn.Close()
 }
 
-func (s *stream) open() {
-	if _, err := s.conn.Do("SET", s.stateKey(), Opened); err != nil {
-		s.err <- err
-	}
+type bufErr struct {
+	buf []byte
+	err error
 }
 
-func (s *stream) streamIn() {
-	defer s.conn.Close()
+func (s *stream) streamIn(reader io.Reader) {
+	defer s.closeIn()
+
+	bufErrChan := s.drain(reader)
 
 	for {
 		select {
-		case buf, ok := <-s.data:
-			if ok {
-				s.append(buf)
-			} else {
-				s.closeIn()
+		case <-s.ctx.Done():
+			return
+		case v, ok := <-bufErrChan:
+			if v.err == io.EOF || v.err == io.ErrUnexpectedEOF || !ok {
 				return
+			} else if v.err != nil {
+				s.err = v.err
+				return
+			} else {
+				if err := s.append(v.buf); err != nil {
+					s.err = err
+					return
+				}
 			}
 		}
 	}
 }
 
-func (s *stream) streamOut() {
-	defer s.conn.Close()
-	defer s.Close()
+func (s *stream) drain(reader io.Reader) <-chan bufErr {
+	bufErrChan := make(chan bufErr)
 
-	var state State
-	var buf []byte
+	go func() {
+		defer close(bufErrChan)
+
+		for {
+			buf := make([]byte, 4096)
+
+			if n, err := reader.Read(buf); err != nil {
+				if n > 0 {
+					bufErrChan <- bufErr{buf[:n], nil}
+				}
+
+				bufErrChan <- bufErr{nil, err}
+				return
+			} else {
+				bufErrChan <- bufErr{buf[:n], nil}
+			}
+		}
+	}()
+
+	return bufErrChan
+}
+
+func (s *stream) streamOut(writer io.Writer) {
+	defer s.close()
+
+	bufErrChan := make(chan bufErr)
+
+	go s.subscribe(bufErrChan)
+
+	for {
+		select {
+		case <-s.ctx.Done():
+			return
+		case v, ok := <-bufErrChan:
+			if v.err == io.EOF || !ok {
+				return
+			} else if v.err != nil {
+				s.err = v.err
+				return
+			} else {
+				if _, err := writer.Write(v.buf); err != nil {
+					s.err = err
+					return
+				}
+			}
+		}
+	}
+}
+
+func (s *stream) subscribe(bufErrChan chan<- bufErr) {
+	defer close(bufErrChan)
+
+	var (
+		state State
+		buf   []byte
+	)
 
 	s.conn.Send("MULTI")
 	s.conn.Send("GET", s.stateKey())
@@ -186,46 +261,19 @@ func (s *stream) streamOut() {
 	s.conn.Send("SUBSCRIBE", s.streamKey())
 
 	if data, err := redis.Values(s.conn.Do("EXEC")); err != nil {
-		s.err <- err
+		bufErrChan <- bufErr{nil, err}
 	} else {
 		redis.Scan(data, &state, &buf)
 
-		s.data <- buf
+		bufErrChan <- bufErr{buf, nil}
 
 		if state == Opened {
-			s.streamChannel()
+			s.streamChannel(bufErrChan)
 		}
 	}
 }
 
-func (s *stream) delete() error {
-	s.conn.Send("MULTI")
-	s.conn.Send("DEL", s.stateKey(), s.dataKey())
-	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
-	_, err := s.conn.Do("EXEC")
-	return err
-}
-
-func (s *stream) append(buf []byte) {
-	s.conn.Send("MULTI")
-	s.conn.Send("SET", s.stateKey(), Opened)
-	s.conn.Send("APPEND", s.dataKey(), buf)
-	s.conn.Send("PUBLISH", s.streamKey(), append([]byte{byte(Opened)}, buf...))
-	if _, err := s.conn.Do("EXEC"); err != nil {
-		s.err <- err
-	}
-}
-
-func (s *stream) closeIn() {
-	s.conn.Send("MULTI")
-	s.conn.Send("SET", s.stateKey(), Closed)
-	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
-	if _, err := s.conn.Do("EXEC"); err != nil {
-		s.err <- err
-	}
-}
-
-func (s *stream) streamChannel() {
+func (s *stream) streamChannel(bufErrChan chan<- bufErr) {
 	psc := redis.PubSubConn{s.conn}
 
 	for {
@@ -235,22 +283,52 @@ func (s *stream) streamChannel() {
 
 		switch v := psc.Receive().(type) {
 		case redis.Message:
-			state, data := State(v.Data[0]), v.Data[1:]
+			state, buf := State(v.Data[0]), v.Data[1:]
 
 			if state == Closed {
 				return
 			} else {
-				s.data <- data
+				bufErrChan <- bufErr{buf, nil}
 			}
 		case error:
-			s.err <- error(v)
+			bufErrChan <- bufErr{nil, error(v)}
 
 			return
 		default:
-			s.err <- errors.New("Unrecognized redis message")
+			bufErrChan <- bufErr{nil, errors.New("Unrecognized redis message")}
 
 			return
 		}
+	}
+}
+
+func (s *stream) delete() error {
+	s.conn.Send("MULTI")
+	s.conn.Send("DEL", s.stateKey(), s.dataKey())
+	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
+	_, err := s.conn.Do("EXEC")
+
+	return err
+}
+
+func (s *stream) append(buf []byte) error {
+	s.conn.Send("MULTI")
+	s.conn.Send("SET", s.stateKey(), Opened)
+	s.conn.Send("APPEND", s.dataKey(), buf)
+	s.conn.Send("PUBLISH", s.streamKey(), append([]byte{byte(Opened)}, buf...))
+	_, err := s.conn.Do("EXEC")
+
+	return err
+}
+
+func (s *stream) closeIn() {
+	defer s.close()
+
+	s.conn.Send("MULTI")
+	s.conn.Send("SET", s.stateKey(), Closed)
+	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
+	if _, err := s.conn.Do("EXEC"); err != nil {
+		s.err = err
 	}
 }
 

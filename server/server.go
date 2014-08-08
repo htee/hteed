@@ -1,7 +1,7 @@
 package server
 
 import (
-	"errors"
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -103,108 +103,100 @@ func (s *server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) recordStream(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Path
+func (s *server) recordStream(ctx context.Context, res http.ResponseWriter, req *http.Request) {
+	name := req.URL.Path
 
-	hj, ok := w.(http.Hijacker)
-	if !ok {
-		s.handleError(w, r, errors.New("webserver doesn't support hijacking"))
+	conn, hw, _ := res.(http.Hijacker).Hijack()
+	defer conn.Close()
+
+	if err := writeContinue(hw, name); err != nil {
+		s.handleError(res, req, err)
 		return
 	}
 
-	conn, bufrw, err := hj.Hijack()
-	if err != nil {
-		s.handleError(w, r, err)
-	}
+	in := stream.In(ctx, name, req.Body)
 
-	defer conn.Close()
-
-	bufrw.WriteString("HTTP/1.1 100 Continue\r\n")
-	bufrw.WriteString("Location: " + r.URL.Path + "\r\n\r\n")
-	bufrw.Flush()
-
-	in := stream.StreamIn(name)
-	inc := in.In()
-
-	defer in.Close()
-
-	for {
-		select {
-		case err := <-in.Errors():
-			s.handleError(w, r, err)
-
-			return
-		default:
-			buf := make([]byte, 4096)
-
-			if n, err := r.Body.Read(buf); err == io.EOF || err == io.ErrUnexpectedEOF {
-				inc <- buf[:n]
-
-				bufrw.WriteString("HTTP/1.1 204 No Content\r\n")
-				bufrw.WriteString("Date: " + time.Now().UTC().Format(time.RFC1123) + "\r\n")
-				bufrw.WriteString("Connection: close\r\n\r\n")
-				bufrw.Flush()
-
-				go s.notifyUpstream(name, "closed")
-
-				return
-			} else if err != nil {
-				s.handleError(w, r, err)
-
-				return
-			} else {
-				inc <- buf[:n]
+	select {
+	case <-in.Done():
+		if err := in.Err(); err != nil {
+			s.handleError(res, req, err)
+		} else {
+			if err := writeNoContent(hw); err != nil {
+				s.handleError(res, req, err)
 			}
 		}
+	case <-res.(http.CloseNotifier).CloseNotify():
+		in.Cancel()
 	}
 }
 
-func (s *server) deleteStream(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Path
+func writeContinue(bw *bufio.ReadWriter, loc string) error {
+	return writeResponse(bw,
+		"HTTP/1.1 100 Continue\r\n",
+		"Location: "+loc+"\r\n\r\n")
+}
 
-	if err := stream.StreamDelete(name); err != nil {
-		s.handleError(w, r, err)
+func writeNoContent(bw *bufio.ReadWriter) error {
+	return writeResponse(bw,
+		"HTTP/1.1 204 No Content\r\n",
+		"Date: "+time.Now().UTC().Format(time.RFC1123)+"\r\n",
+		"Connection: close\r\n\r\n")
+}
+
+func writeResponse(bw *bufio.ReadWriter, body ...string) error {
+	for _, chunk := range body {
+		if _, err := bw.WriteString(chunk); err != nil {
+			return err
+		}
+	}
+
+	return bw.Flush()
+}
+
+func (s *server) deleteStream(ctx context.Context, res http.ResponseWriter, req *http.Request) {
+	name := req.URL.Path
+
+	if err := stream.StreamDelete(ctx, name); err != nil {
+		s.handleError(res, req, err)
 	} else {
-		w.WriteHeader(204)
-		w.(http.Flusher).Flush()
+		res.WriteHeader(204)
+		res.(http.Flusher).Flush()
 	}
 }
 
-func (s *server) playbackStream(ctx context.Context, w http.ResponseWriter, r *http.Request) {
-	name := r.URL.Path
+func (s *server) playbackStream(ctx context.Context, res http.ResponseWriter, req *http.Request) {
+	name := req.URL.Path
 
-	out := stream.StreamOut(name)
-	cc := w.(http.CloseNotifier).CloseNotify()
+	writer := res.(io.Writer)
+	flusher := res.(http.Flusher)
 
-	write := w.Write
-	if isSSE(r) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		write = sseWriter{w}.Write
+	if isSSE(req) {
+		res.Header().Set("Content-Type", "text/event-stream")
+		writer = sseWriter{res}
 	}
 
-	w.WriteHeader(200)
+	res.WriteHeader(200)
+	out := stream.Out(ctx, name, flushWriter{flusher, writer})
 
-	for {
-		select {
-		case err := <-out.Errors():
-			s.handleError(w, r, err)
-			return
-		case <-cc:
-			return
-		case data, ok := <-out.Out():
-			if ok {
-				write(data)
-				w.(http.Flusher).Flush()
-			} else {
-				return
-			}
+	select {
+	case <-out.Done():
+		if err := out.Err(); err != nil {
+			s.handleError(res, req, err)
 		}
+	case <-res.(http.CloseNotifier).CloseNotify():
+		out.Cancel()
 	}
 }
 
-func (s *server) handleError(w http.ResponseWriter, r *http.Request, err error) {
-	s.logger.Printf("%s - ERROR: %s", r.RemoteAddr, err.Error())
-	http.Error(w, err.Error(), http.StatusInternalServerError)
+type flushWriter struct {
+	f http.Flusher
+	w io.Writer
+}
+
+func (w flushWriter) Write(p []byte) (int, error) {
+	defer w.f.Flush()
+
+	return w.w.Write(p)
 }
 
 func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
@@ -237,4 +229,9 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 
 		proxyResponse(w, ur)
 	}
+}
+
+func (s *server) handleError(w http.ResponseWriter, r *http.Request, err error) {
+	s.logger.Printf("%s - ERROR: %s", r.RemoteAddr, err.Error())
+	http.Error(w, err.Error(), http.StatusInternalServerError)
 }
