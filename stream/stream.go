@@ -80,11 +80,10 @@ func StreamDelete(ctx context.Context, name string) error {
 
 func newStream(ctx context.Context, name string) *stream {
 	return &stream{
-		ctx:    ctx,
-		name:   name,
-		conn:   pool.Get(),
-		done:   make(chan struct{}),
-		closed: false,
+		ctx:  ctx,
+		name: name,
+		conn: pool.Get(),
+		done: make(chan struct{}),
 	}
 }
 
@@ -106,8 +105,6 @@ type stream struct {
 	err error
 
 	done chan struct{}
-
-	closed bool
 }
 
 func (s *stream) Name() string { return s.name }
@@ -119,11 +116,6 @@ func (s *stream) Err() error { return s.err }
 func (s *stream) Cancel() { panic("TODO") }
 
 func (s *stream) close() {
-	if s.closed {
-		panic("Close() called twice")
-	}
-
-	s.closed = true
 	close(s.done)
 	s.conn.Close()
 }

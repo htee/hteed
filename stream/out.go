@@ -60,10 +60,6 @@ func streamChannel(s *stream, bufErrChan chan<- bufErr) {
 	psc := redis.PubSubConn{s.conn}
 
 	for {
-		if s.closed {
-			return
-		}
-
 		switch v := psc.Receive().(type) {
 		case redis.Message:
 			state, buf := State(v.Data[0]), v.Data[1:]
