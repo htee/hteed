@@ -20,7 +20,7 @@ const (
 var (
 	pool      *redis.Pool
 	keyPrefix string
-	testing   bool
+	testMode  bool
 )
 
 func init() {
@@ -46,13 +46,13 @@ func configureStream(cnf *config.Config) error {
 	}
 
 	keyPrefix = cnf.KeyPrefix
-	testing = cnf.Testing
+	testMode = cnf.Testing
 
 	return nil
 }
 
 func Reset() error {
-	if !testing {
+	if !testMode {
 		return errors.New("Reset disabled unless testing")
 	}
 
@@ -78,44 +78,29 @@ func StreamDelete(ctx context.Context, name string) error {
 	return newStream(ctx, name).delete()
 }
 
-func newStream(ctx context.Context, name string) *stream {
-	return &stream{
+func newStream(ctx context.Context, name string) *Stream {
+	return &Stream{
 		ctx:  ctx,
-		name: name,
+		Name: name,
 		conn: pool.Get(),
 		done: make(chan struct{}),
 	}
 }
 
-type Stream interface {
-	Name() string
-
-	Cancel()
-	Done() <-chan struct{}
-	Err() error
-}
-
-type stream struct {
-	ctx context.Context
-
-	name string
-
+type Stream struct {
+	ctx  context.Context
 	conn redis.Conn
-
-	err error
-
 	done chan struct{}
+
+	Name string
+	Err  error
 }
 
-func (s *stream) Name() string { return s.name }
+func (s *Stream) Done() <-chan struct{} { return s.done }
 
-func (s *stream) Done() <-chan struct{} { return s.done }
+func (s *Stream) Cancel() { s.close() }
 
-func (s *stream) Err() error { return s.err }
-
-func (s *stream) Cancel() { panic("TODO") }
-
-func (s *stream) close() {
+func (s *Stream) close() {
 	close(s.done)
 	s.conn.Close()
 }
@@ -125,7 +110,7 @@ type bufErr struct {
 	err error
 }
 
-func (s *stream) delete() error {
+func (s *Stream) delete() error {
 	s.conn.Send("MULTI")
 	s.conn.Send("DEL", s.stateKey(), s.dataKey())
 	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
@@ -134,7 +119,7 @@ func (s *stream) delete() error {
 	return err
 }
 
-func (s *stream) append(buf []byte) error {
+func (s *Stream) append(buf []byte) error {
 	s.conn.Send("MULTI")
 	s.conn.Send("SET", s.stateKey(), Opened)
 	s.conn.Send("APPEND", s.dataKey(), buf)
@@ -144,7 +129,7 @@ func (s *stream) append(buf []byte) error {
 	return err
 }
 
-func (s *stream) subscribe() (state State, buf []byte, err error) {
+func (s *Stream) subscribe() (state State, buf []byte, err error) {
 	s.conn.Send("MULTI")
 	s.conn.Send("GET", s.stateKey())
 	s.conn.Send("GET", s.dataKey())
@@ -157,7 +142,7 @@ func (s *stream) subscribe() (state State, buf []byte, err error) {
 	return
 }
 
-func (s *stream) finish() error {
+func (s *Stream) finish() error {
 	s.conn.Send("MULTI")
 	s.conn.Send("SET", s.stateKey(), Closed)
 	s.conn.Send("PUBLISH", s.streamKey(), []byte{byte(Closed)})
@@ -166,14 +151,14 @@ func (s *stream) finish() error {
 	return err
 }
 
-func (s *stream) getState() (State, error) {
+func (s *Stream) getState() (State, error) {
 	state, err := redis.Int(s.conn.Do("GET", s.stateKey()))
 
 	return State(state), err
 }
 
-func (s *stream) stateKey() string { return keyPrefix + "state:" + s.name }
+func (s *Stream) stateKey() string { return keyPrefix + "state:" + s.Name }
 
-func (s *stream) dataKey() string { return keyPrefix + "data:" + s.name }
+func (s *Stream) dataKey() string { return keyPrefix + "data:" + s.Name }
 
-func (s *stream) streamKey() string { return keyPrefix + s.name }
+func (s *Stream) streamKey() string { return keyPrefix + s.Name }

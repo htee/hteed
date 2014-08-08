@@ -6,7 +6,7 @@ import (
 	"code.google.com/p/go.net/context"
 )
 
-func In(ctx context.Context, name string, reader io.Reader) Stream {
+func In(ctx context.Context, name string, reader io.Reader) *Stream {
 	s := newStream(ctx, name)
 
 	go streamIn(s, reader)
@@ -14,7 +14,7 @@ func In(ctx context.Context, name string, reader io.Reader) Stream {
 	return s
 }
 
-func streamIn(s *stream, reader io.Reader) {
+func streamIn(s *Stream, reader io.Reader) {
 	defer closeIn(s)
 
 	bufErrChan := make(chan bufErr)
@@ -29,11 +29,11 @@ func streamIn(s *stream, reader io.Reader) {
 			if v.err == io.EOF || v.err == io.ErrUnexpectedEOF || !ok {
 				return
 			} else if v.err != nil {
-				s.err = v.err
+				s.Err = v.err
 				return
 			} else {
 				if err := s.append(v.buf); err != nil {
-					s.err = err
+					s.Err = err
 					return
 				}
 			}
@@ -60,10 +60,10 @@ func drain(bufErrChan chan<- bufErr, reader io.Reader) {
 	}
 }
 
-func closeIn(s *stream) {
+func closeIn(s *Stream) {
 	defer s.close()
 
 	if err := s.finish(); err != nil {
-		s.err = err
+		s.Err = err
 	}
 }

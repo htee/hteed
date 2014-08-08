@@ -118,8 +118,8 @@ func (s *server) recordStream(ctx context.Context, res http.ResponseWriter, req 
 
 	select {
 	case <-in.Done():
-		if err := in.Err(); err != nil {
-			s.handleError(res, req, err)
+		if in.Err != nil {
+			s.handleError(res, req, in.Err)
 		} else {
 			if err := writeNoContent(hw); err != nil {
 				s.handleError(res, req, err)
@@ -180,8 +180,8 @@ func (s *server) playbackStream(ctx context.Context, res http.ResponseWriter, re
 
 	select {
 	case <-out.Done():
-		if err := out.Err(); err != nil {
-			s.handleError(res, req, err)
+		if out.Err != nil {
+			s.handleError(res, req, out.Err)
 		}
 	case <-res.(http.CloseNotifier).CloseNotify():
 		out.Cancel()

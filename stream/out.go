@@ -4,12 +4,11 @@ import (
 	"errors"
 	"io"
 
-	"github.com/garyburd/redigo/redis"
-
 	"code.google.com/p/go.net/context"
+	"github.com/garyburd/redigo/redis"
 )
 
-func Out(ctx context.Context, name string, writer io.Writer) Stream {
+func Out(ctx context.Context, name string, writer io.Writer) *Stream {
 	s := newStream(ctx, name)
 
 	go streamOut(s, writer)
@@ -17,7 +16,7 @@ func Out(ctx context.Context, name string, writer io.Writer) Stream {
 	return s
 }
 
-func streamOut(s *stream, writer io.Writer) {
+func streamOut(s *Stream, writer io.Writer) {
 	defer s.close()
 
 	bufErrChan := make(chan bufErr)
@@ -32,11 +31,11 @@ func streamOut(s *stream, writer io.Writer) {
 			if v.err == io.EOF || !ok {
 				return
 			} else if v.err != nil {
-				s.err = v.err
+				s.Err = v.err
 				return
 			} else {
 				if _, err := writer.Write(v.buf); err != nil {
-					s.err = err
+					s.Err = err
 					return
 				}
 			}
@@ -44,7 +43,7 @@ func streamOut(s *stream, writer io.Writer) {
 	}
 }
 
-func subscribe(s *stream, bufErrChan chan<- bufErr) {
+func subscribe(s *Stream, bufErrChan chan<- bufErr) {
 	defer close(bufErrChan)
 
 	state, buf, err := s.subscribe()
@@ -56,7 +55,7 @@ func subscribe(s *stream, bufErrChan chan<- bufErr) {
 	}
 }
 
-func streamChannel(s *stream, bufErrChan chan<- bufErr) {
+func streamChannel(s *Stream, bufErrChan chan<- bufErr) {
 	psc := redis.PubSubConn{s.conn}
 
 	for {
