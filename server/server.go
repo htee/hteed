@@ -2,74 +2,23 @@ package server
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"code.google.com/p/go.net/context"
 
 	"github.com/htee/hteed/Godeps/_workspace/src/github.com/codegangsta/negroni"
-	"github.com/htee/hteed/config"
 	"github.com/htee/hteed/stream"
 )
 
-var (
-	upstream   *url.URL
-	authHeader string
-)
-
-func init() {
-	config.ConfigCallback(configureServer)
-}
-
-func configureServer(cnf *config.Config) error {
-	authHeader = "Token " + cnf.WebToken
-
-	var err error
-	upstream, err = url.Parse(cnf.WebURL)
-	if err != nil {
-		return err
-	}
-
-	pingURL, err := upstream.Parse("/ping")
-	if err != nil {
-		return err
-	}
-
-	pingReq, err := http.NewRequest("GET", pingURL.String(), nil)
-	if err != nil {
-		return err
-	}
-
-	pingReq.Header.Set("X-Htee-Authorization", authHeader)
-	pingClient := http.Client{
-		Timeout: 1 * time.Second,
-	}
-
-	pingRes, err := pingClient.Do(pingReq)
-	if err != nil {
-		return err
-	}
-
-	if pingRes.StatusCode != 200 {
-		return fmt.Errorf("Expected 200 OK response from upstream ping, got %s", pingRes.Status)
-	}
-
-	return err
-}
-
 func ServerHandler() http.Handler {
 	s := &server{
-		transport: &http.Transport{
-			ResponseHeaderTimeout: 15 * time.Second,
-		},
-		upstream: upstream,
-		logger:   log.New(os.Stdout, "[server] ", log.LstdFlags),
+		logger: log.New(os.Stdout, "[server] ", log.LstdFlags),
 	}
 
 	n := negroni.New()
@@ -82,9 +31,7 @@ func ServerHandler() http.Handler {
 }
 
 type server struct {
-	logger    *log.Logger
-	transport *http.Transport
-	upstream  *url.URL
+	logger *log.Logger
 }
 
 func (s *server) handleRequest(w http.ResponseWriter, r *http.Request) {
@@ -200,9 +147,8 @@ func (w flushWriter) Write(p []byte) (int, error) {
 }
 
 func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	ur, err := s.proxyUpstream(r)
-	if err != nil {
-		s.handleError(w, r, err)
+	ur := Proxy.ProxyHTTP(r)
+	if ur == nil {
 		return
 	}
 
@@ -234,4 +180,16 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 func (s *server) handleError(w http.ResponseWriter, r *http.Request, err error) {
 	s.logger.Printf("%s - ERROR: %s", r.RemoteAddr, err.Error())
 	http.Error(w, err.Error(), http.StatusInternalServerError)
+}
+
+func (s *server) fixRailsVerbMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	if r.Method == "POST" && r.Header.Get("Content-Type") == "application/x-www-form-urlencoded" {
+		r.ParseForm()
+
+		if method := r.Form["_method"][0]; method != "" {
+			r.Method = strings.ToUpper(method)
+		}
+	}
+
+	next(w, r)
 }
