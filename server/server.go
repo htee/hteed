@@ -13,14 +13,36 @@ import (
 	"code.google.com/p/go.net/context"
 
 	"github.com/htee/hteed/Godeps/_workspace/src/github.com/codegangsta/negroni"
+	"github.com/htee/hteed/config"
 	"github.com/htee/hteed/stream"
 )
 
-func ServerHandler() http.Handler {
-	s := &server{
+var Server *server
+
+func init() {
+	config.ConfigCallback(configureServer)
+}
+
+func configureServer(cnf *config.Config) error {
+	Server = &server{
 		logger: log.New(os.Stdout, "[server] ", log.LstdFlags),
 	}
 
+	return nil
+}
+
+type server struct {
+	logger *log.Logger
+}
+
+func ListenAndServe(addr string) {
+	Server.logger.Printf("Listening on %s", addr)
+	defer Server.logger.Printf("Finished listening on %s", addr)
+
+	http.ListenAndServe(addr, Server.ServerHandler())
+}
+
+func (s *server) ServerHandler() http.Handler {
 	n := negroni.New()
 	n.Use(negroni.HandlerFunc(s.upstreamMiddleware))
 	n.Use(negroni.HandlerFunc(s.fixRailsVerbMiddleware))
@@ -28,10 +50,6 @@ func ServerHandler() http.Handler {
 	n.UseHandler(http.HandlerFunc(s.handleRequest))
 
 	return n
-}
-
-type server struct {
-	logger *log.Logger
 }
 
 func (s *server) handleRequest(w http.ResponseWriter, r *http.Request) {

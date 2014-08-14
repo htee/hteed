@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"strings"
 
@@ -52,7 +51,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	http.ListenAndServe(c.Addr(), server.ServerHandler())
+	server.ListenAndServe(c.Addr())
 }
 
 func loadConfig(configFile string) *config.Config {
