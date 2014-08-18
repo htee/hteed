@@ -3,9 +3,9 @@ package server
 import (
 	"bufio"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/htee/hteed/Godeps/_workspace/src/github.com/codegangsta/negroni"
 	"github.com/htee/hteed/config"
+	"github.com/htee/hteed/proxy"
 	"github.com/htee/hteed/stream"
 )
 
@@ -165,33 +166,48 @@ func (w flushWriter) Write(p []byte) (int, error) {
 }
 
 func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	ur := Proxy.ProxyHTTP(r)
-	if ur == nil {
+	pc := proxy.ProxyHTTP(r)
+
+	// Hijack is incompatible with use of CloseNotifier
+	var cn <-chan bool
+	if r.Method != "POST" {
+		cn = w.(http.CloseNotifier).CloseNotify()
+	} else {
+		cn = make(chan bool)
+	}
+
+	select {
+	case <-cn:
+		pc.Cancel()
+		return
+	case <-pc.Done():
+		if pc.Err != nil {
+			s.handleError(w, r, pc.Err)
+			return
+		}
+	}
+
+	pr := pc.Response
+	if pr == nil {
 		return
 	}
 
-	switch ur.StatusCode {
-	case 202:
-
-		if rr, err := parseRewriteRequest(r, ur); err != nil {
+	if requestRewritten(pr) {
+		if rr, err := proxy.RewriteRequest(r, pr); err != nil {
 			s.handleError(w, r, err)
 		} else {
-			next(w, rr)
+			r = rr
 		}
-	case 204:
+	}
+
+	if nopContinue(pr) {
+		go next(responseDiscarder(), proxy.CopyRequest(r))
+	}
+
+	if continueRequest(pr) {
 		next(w, r)
-	default:
-		if ur.Header.Get("X-Htee-Downstream-Continue") != "" {
-			ur.Header.Del("X-Htee-Downstream-Continue")
-
-			if rr, err := cloneRequest(r); err != nil {
-				s.handleError(w, r, err)
-			} else {
-				go next(httptest.NewRecorder(), rr)
-			}
-		}
-
-		proxyResponse(w, ur)
+	} else {
+		proxy.Copy(w, pr)
 	}
 }
 
@@ -211,3 +227,35 @@ func (s *server) fixRailsVerbMiddleware(w http.ResponseWriter, r *http.Request, 
 
 	next(w, r)
 }
+
+func requestRewritten(res *http.Response) bool { return res.StatusCode == 202 }
+
+func nopContinue(res *http.Response) bool {
+	if res.Header.Get("X-Htee-Downstream-Continue") != "" {
+		res.Header.Del("X-Htee-Downstream-Continue")
+
+		return true
+	}
+
+	return false
+}
+
+func continueRequest(res *http.Response) bool {
+	return requestRewritten(res) || res.StatusCode == 204
+}
+
+func responseDiscarder() http.ResponseWriter {
+	return &discarder{ioutil.Discard, make(map[string][]string)}
+}
+
+type discarder struct {
+	io.Writer
+
+	hdr http.Header
+}
+
+func (d *discarder) WriteHeader(int) {}
+
+func (d *discarder) Flush() {}
+
+func (d *discarder) Header() http.Header { return d.hdr }

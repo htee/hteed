@@ -88,9 +88,10 @@ func newStream(ctx context.Context, name string) *Stream {
 }
 
 type Stream struct {
-	ctx  context.Context
-	conn redis.Conn
-	done chan struct{}
+	ctx    context.Context
+	conn   redis.Conn
+	done   chan struct{}
+	closed bool
 
 	Name string
 	Err  error
@@ -101,6 +102,11 @@ func (s *Stream) Done() <-chan struct{} { return s.done }
 func (s *Stream) Cancel() { s.close() }
 
 func (s *Stream) close() {
+	if s.closed {
+		return
+	}
+
+	s.closed = true
 	close(s.done)
 	s.conn.Close()
 }
