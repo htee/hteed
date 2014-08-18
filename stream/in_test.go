@@ -4,7 +4,7 @@ import (
 	"io"
 	"testing"
 
-	"code.google.com/p/go.net/context"
+	"github.com/htee/hteed/Godeps/_workspace/src/code.google.com/p/go.net/context"
 )
 
 func TestCancelIn(t *testing.T) {

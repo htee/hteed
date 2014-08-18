@@ -3,7 +3,7 @@ package stream
 import (
 	"io"
 
-	"code.google.com/p/go.net/context"
+	"github.com/htee/hteed/Godeps/_workspace/src/code.google.com/p/go.net/context"
 )
 
 func In(ctx context.Context, name string, reader io.Reader) *Stream {

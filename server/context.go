@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"code.google.com/p/go.net/context"
-	gcontext "github.com/gorilla/context"
+	"github.com/htee/hteed/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	gcontext "github.com/htee/hteed/Godeps/_workspace/src/github.com/gorilla/context"
 )
 
 // newContext returns a Context whose Value method returns values associated

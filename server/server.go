@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"code.google.com/p/go.net/context"
+	"github.com/htee/hteed/Godeps/_workspace/src/code.google.com/p/go.net/context"
 
 	"github.com/htee/hteed/Godeps/_workspace/src/github.com/codegangsta/negroni"
 	"github.com/htee/hteed/config"

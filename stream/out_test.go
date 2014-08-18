@@ -5,8 +5,8 @@ import (
 	"net"
 	"testing"
 
-	"code.google.com/p/go.net/context"
-	"github.com/garyburd/redigo/redis"
+	"github.com/htee/hteed/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	"github.com/htee/hteed/Godeps/_workspace/src/github.com/garyburd/redigo/redis"
 )
 
 func TestCancelOut(t *testing.T) {

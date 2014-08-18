@@ -6,6 +6,11 @@
 	],
 	"Deps": [
 		{
+			"ImportPath": "code.google.com/p/go.net/context",
+			"Comment": "null-143",
+			"Rev": "6a58d15273e127ff2697fa5a848435af0ea1255d"
+		},
+		{
 			"ImportPath": "github.com/BurntSushi/toml",
 			"Rev": "bd2bdf7f18f849530ef7a1c29a4290217cab32a1"
 		},
@@ -17,6 +22,10 @@
 		{
 			"ImportPath": "github.com/garyburd/redigo/redis",
 			"Rev": "1c7841955920910958c71b1cc1a03f628267d468"
+		},
+		{
+			"ImportPath": "github.com/gorilla/context",
+			"Rev": "14f550f51af52180c2eefed15e5fd18d63c0a64a"
 		}
 	]
 }
