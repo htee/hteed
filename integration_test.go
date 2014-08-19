@@ -42,6 +42,10 @@ func init() {
 	}
 }
 
+func serverHandler() http.Handler {
+	return server.Server.ServerHandler()
+}
+
 func testClient(url string) (*htee.Client, error) {
 	return htee.NewClient(&htee.Config{Endpoint: url, Login: "test"})
 }
@@ -55,7 +59,7 @@ func delTestData() {
 func TestHelloWorldRoundTrip(t *testing.T) {
 	defer stream.Reset()
 
-	ts := httptest.NewServer(server.ServerHandler())
+	ts := httptest.NewServer(serverHandler())
 	defer ts.Close()
 
 	client, err := testClient(ts.URL)
@@ -99,7 +103,7 @@ func TestHelloWorldRoundTrip(t *testing.T) {
 func TestStreamingLockstep(t *testing.T) {
 	defer delTestData()
 
-	ts := httptest.NewServer(server.ServerHandler())
+	ts := httptest.NewServer(serverHandler())
 	defer ts.Close()
 
 	client, err := testClient(ts.URL)
@@ -151,7 +155,7 @@ func TestStreamingLockstep(t *testing.T) {
 func TestStreamingFanOut(t *testing.T) {
 	defer delTestData()
 
-	ts := httptest.NewServer(server.ServerHandler())
+	ts := httptest.NewServer(serverHandler())
 	defer ts.Close()
 
 	client, err := testClient(ts.URL)
@@ -209,7 +213,7 @@ func TestStreamingFanOut(t *testing.T) {
 func TestEventStreamRequest(t *testing.T) {
 	defer delTestData()
 
-	ts := httptest.NewServer(server.ServerHandler())
+	ts := httptest.NewServer(serverHandler())
 	defer ts.Close()
 
 	client, err := testClient(ts.URL)
@@ -274,7 +278,7 @@ func TestEventStreamRequest(t *testing.T) {
 }
 
 func TestDeleteStreamRequest(t *testing.T) {
-	ts := httptest.NewServer(server.ServerHandler())
+	ts := httptest.NewServer(serverHandler())
 
 	client, err := testClient(ts.URL)
 	if err != nil {
