@@ -98,6 +98,7 @@ func (p *proxy) proxyHTTP(req *http.Request) *Context {
 func (p *proxy) rewriteRequest(req *http.Request) *http.Request {
 	rreq := CopyRequest(req)
 
+	rreq.Host = p.upstream.Host
 	rreq.URL.Scheme = p.upstream.Scheme
 	rreq.URL.Host = p.upstream.Host
 	rreq.URL.Path = singleJoiningSlash(p.upstream.Path, req.URL.Path)
