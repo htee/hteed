@@ -80,7 +80,8 @@ func (s *server) recordStream(ctx context.Context, res http.ResponseWriter, req 
 		return
 	}
 
-	in := stream.In(ctx, name, req.Body)
+	reader := &io.LimitedReader{R: req.Body, N: 1 << 20}
+	in := stream.In(ctx, name, reader)
 
 	select {
 	case <-in.Done():

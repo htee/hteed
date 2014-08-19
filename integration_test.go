@@ -3,6 +3,8 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -331,6 +333,57 @@ func TestDeleteStreamRequest(t *testing.T) {
 	}
 }
 
+func TestLargeStream(t *testing.T) {
+	defer delTestData()
+
+	ts := httptest.NewServer(serverHandler())
+	defer ts.Close()
+
+	client, err := testClient(ts.URL)
+	if err != nil {
+		t.Error(err)
+	}
+
+	data := make([]byte, MB+KB) // >1MB
+	if _, err := rand.Read(data); err != nil {
+		t.Error(err)
+	}
+
+	pr, pw := io.Pipe()
+
+	go func() {
+		pw.Write(data)
+		pw.Close()
+	}()
+
+	cntRes, err := client.PostStream(pr)
+	if err != nil {
+		t.Error(err)
+	}
+
+	owner, name := readNWO(cntRes)
+	res, err := client.GetStream(owner, name)
+	if err != nil {
+		t.Error(err)
+	}
+
+	rb, err := ioutil.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(rb) > MB {
+		t.Errorf("stream is larger than 1MB")
+	} else if len(rb) != MB {
+		t.Errorf("stream was smaller than expected")
+	}
+
+	if !bytes.Equal(rb, data[0:MB]) {
+		t.Errorf("stream output differs from input")
+	}
+}
+
 func fakeWebHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/ping" {
 		w.WriteHeader(200)
@@ -363,3 +416,9 @@ func readNWO(res *httplus.Response) (owner, name string) {
 	owner, name = parts[0], parts[1]
 	return
 }
+
+const (
+	_      = iota // ignore first value by assigning to blank identifier
+	KB int = 1 << (10 * iota)
+	MB
+)
