@@ -98,6 +98,11 @@ func (p *proxy) proxyHTTP(req *http.Request) *Context {
 func (p *proxy) rewriteRequest(req *http.Request) *http.Request {
 	rreq := CopyRequest(req)
 
+	rreq.Header.Set("X-Htee-Authorization", p.authHeader())
+	rreq.Header.Set("X-Htee-Forwarded-Proto", proto(req)) // Heroku overwrites X-Forwarded-Proto
+	rreq.Header.Set("X-Forwarded-Proto", proto(req))
+	rreq.Header.Set("X-Forwarded-Host", req.Host)
+
 	rreq.Host = p.upstream.Host
 	rreq.URL.Scheme = p.upstream.Scheme
 	rreq.URL.Host = p.upstream.Host
@@ -108,11 +113,19 @@ func (p *proxy) rewriteRequest(req *http.Request) *http.Request {
 		rreq.URL.RawQuery = p.upstream.RawQuery + "&" + req.URL.RawQuery
 	}
 
-	rreq.Header.Set("X-Htee-Authorization", p.authHeader())
-	rreq.Header.Set("X-Forwarded-Host", req.Host)
-	rreq.Header.Set("X-Forwarded-Proto", req.URL.Scheme)
-
 	return rreq
 }
 
 func (p *proxy) authHeader() string { return "Token " + p.authToken }
+
+func proto(req *http.Request) string {
+	if req.URL.Scheme != "" {
+		return req.URL.Scheme
+	} else if req.Header.Get("X-Forwarded-Proto") != "" {
+		return req.Header.Get("X-Forwarded-Proto")
+	} else if req.TLS != nil {
+		return "https"
+	} else {
+		return "http"
+	}
+}
