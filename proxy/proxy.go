@@ -110,6 +110,7 @@ func (p *proxy) rewriteRequest(req *http.Request) *http.Request {
 
 	rreq.Header.Set("X-Htee-Authorization", p.authHeader())
 	rreq.Header.Set("X-Forwarded-Host", req.Host)
+	rreq.Header.Set("X-Forwarded-Proto", req.URL.Scheme)
 
 	return rreq
 }
