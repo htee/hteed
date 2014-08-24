@@ -72,7 +72,12 @@ func (s *server) handleRequest(w http.ResponseWriter, r *http.Request) {
 func (s *server) recordStream(ctx context.Context, res http.ResponseWriter, req *http.Request) {
 	name := req.URL.Path
 
-	conn, hw, _ := res.(http.Hijacker).Hijack()
+	conn, hw, err := res.(http.Hijacker).Hijack()
+	if err != nil {
+		s.handleError(res, req, err)
+		return
+	}
+
 	defer conn.Close()
 
 	if err := writeContinue(hw, name); err != nil {
@@ -171,7 +176,7 @@ func (s *server) upstreamMiddleware(w http.ResponseWriter, r *http.Request, next
 
 	// Hijack is incompatible with use of CloseNotifier
 	var cn <-chan bool
-	if r.Method != "POST" {
+	if !(r.Method == "POST" || r.Method == "PUT") {
 		cn = w.(http.CloseNotifier).CloseNotify()
 	} else {
 		cn = make(chan bool)
