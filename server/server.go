@@ -5,12 +5,14 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/htee/hteed/Godeps/_workspace/src/code.google.com/p/go.net/context"
+	"github.com/stretchr/graceful"
 
 	"github.com/htee/hteed/Godeps/_workspace/src/github.com/codegangsta/negroni"
 	"github.com/htee/hteed/config"
@@ -34,13 +36,26 @@ func configureServer(cnf *config.Config) error {
 
 type server struct {
 	logger *log.Logger
+
+	gracefulServer *graceful.Server
 }
 
 func ListenAndServe(addr string) {
 	Server.logger.Printf("Listening on %s", addr)
 	defer Server.logger.Printf("Finished listening on %s", addr)
 
-	http.ListenAndServe(addr, Server.ServerHandler())
+	srv := &graceful.Server{
+		ShutdownInitiated: func() { Server.logger.Printf("Shutdown initiated on %s", addr) },
+
+		Server: &http.Server{
+			Addr:    addr,
+			Handler: Server.ServerHandler(),
+		},
+	}
+
+	Server.gracefulServer = srv
+
+	srv.ListenAndServe()
 }
 
 func (s *server) ServerHandler() http.Handler {
@@ -79,6 +94,7 @@ func (s *server) recordStream(ctx context.Context, res http.ResponseWriter, req 
 	}
 
 	defer conn.Close()
+	defer s.closeHijacked(conn)
 
 	if err := writeContinue(hw, name); err != nil {
 		s.handleError(res, req, err)
@@ -97,8 +113,6 @@ func (s *server) recordStream(ctx context.Context, res http.ResponseWriter, req 
 				s.handleError(res, req, err)
 			}
 		}
-	case <-res.(http.CloseNotifier).CloseNotify():
-		in.Cancel()
 	}
 }
 
@@ -232,6 +246,10 @@ func (s *server) fixRailsVerbMiddleware(w http.ResponseWriter, r *http.Request, 
 	}
 
 	next(w, r)
+}
+
+func (s *server) closeHijacked(conn net.Conn) {
+	s.gracefulServer.NotifyClosed(conn)
 }
 
 func requestRewritten(res *http.Response) bool { return res.StatusCode == 202 }
