@@ -17,6 +17,7 @@ import (
 	"github.com/htee/hteed/Godeps/_workspace/src/github.com/codegangsta/negroni"
 	"github.com/htee/hteed/config"
 	"github.com/htee/hteed/proxy"
+	"github.com/htee/hteed/socket"
 	"github.com/htee/hteed/stream"
 )
 
@@ -55,7 +56,12 @@ func ListenAndServe(addr string) {
 
 	Server.gracefulServer = srv
 
-	srv.ListenAndServe()
+	listener, err := socket.CreateTCPSocket("tcp4", addr)
+	if err != nil {
+		Server.logger.Fatal(err.Error())
+	}
+
+	srv.Serve(listener)
 }
 
 func (s *server) ServerHandler() http.Handler {
